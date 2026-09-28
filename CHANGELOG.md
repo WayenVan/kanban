@@ -5,6 +5,855 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-09-28 ([#845](https://github.com/kanban-rs/kanban/pull/845))
+
+### Other Changes (2026-09-28)
+
+cli, mcp: fix `board list` / `list_boards` unconditionally fetching archived-board markers before filtering, which made every board listing fail against the HTTP backend (a remote `kanban-server`) even for the default live-only view. Both now reuse the service layer's selector-aware gather, which only fetches archived markers when the selector actually needs them.
+
+tui: adds a `y` keybind in the Diagnostics (F12) popup to copy all log entries to the clipboard, newest first. Log entries can include local file paths and server URLs, so treat a copied log like any other clipboard content before pasting it somewhere public.
+
+cli, mcp: fix unscoped card listing (`card list` without `--board`, e.g. `--sprint`-only queries) unconditionally fetching the workspace-global archived-card marker collection before filtering, breaking every such query against the HTTP backend (a remote `kanban-server`) even for the default live-only view. `list_cards_detailed` now skips that fetch when the selector is live-only, mirroring the board-listing fix.
+
+### KAN-1104 Make Sqlitestore Instance Id Inherent (2026-09-28)
+
+persistence-sqlite: add an inherent `SqliteStore::instance_id` method so callers no longer need `PersistenceStore` in scope to read it, and switch `SqliteBackend`'s own lookup to use it.
+
+### KAN-1108 Delete Sqlitestorefactory Registrations (2026-09-28)
+
+persistence-sqlite: removes the public `SqliteStoreFactory` struct and its
+`StoreFactory` impl, since `StoreManager::make_backend` and `detect_backend`
+already resolve SQLite locators through the `KanbanBackendRegistry` alone.
+service: `StoreManager::detect_backend` now delegates its fallback sniff to
+the backend registry instead of a hardcoded `#[cfg(feature = "sqlite")]`
+magic-byte check, so it also recognises a not-yet-created `.db` path.
+mcp: adds `McpServer::register_backend_only` for registering a backend
+factory without a paired `StoreFactory`.
+
+### KAN-1109 Delete Impl Persistencestore Sqlitestore Snapshot Async (2026-09-28)
+
+persistence-sqlite: removes `impl PersistenceStore for SqliteStore` and the
+`snapshot_async`/`apply_snapshot_async` whole-store pair, along with the
+`list_archived_boards_async`, `list_prefixes_async`, and
+`write_prefix_with_conn` helpers that existed only to support them.
+`SqliteStore` gains a new inherent `close` method; `SqliteBackend::close`,
+the sole production caller, now goes through it directly instead of the
+trait. SQLite is now reachable only as a `KanbanBackend`; nothing in the
+workspace can ask it for its whole contents as a single storage-format
+value. `kanban-persistence` stays a dependency of `kanban-persistence-sqlite`
+for `PersistenceMetadata`.
+
+### KAN-1204 Move Json Migration Legs Store (2026-09-28)
+
+service: adds `StoreManager::make_backend_named` for resolving a
+`KanbanBackend` by exact name, bypassing header/extension sniffing (a
+migration destination never exists yet, so there is nothing to sniff).
+`migrate_store`'s JSON-side source and destination now route through
+`make_backend`/`make_backend_named` and a typed `Snapshot` via the
+`store_adapter` module instead of `PersistenceStore`/`StoreSnapshot`;
+FK repair moves with it as `store_adapter::repair_fks`, replacing the
+old JSON-level `repair_snapshot_fks`/`fix_card_fks` pair.
+
+### KAN-1359 Move Isolated Model Kanban Domain (2026-09-28)
+
+domain,view,tui: move the `Model` out of `kanban-view` into `kanban-domain` and strip its nine presentation fields into a new `kanban_view::controller::Controller`. The `Model` now holds entities and load state only (eleven fields), so `kanban-service` will be able to name it without depending on the presentation layer. The four `displayed_*` partitions, the `archived_board_at` side map and the four board-sort scalars, together with the nine methods over them, become `Controller` state rebuilt by the new `Controller::sync(&Model)`; `App` holds the two as peers and routes every snapshot load through `App::load_snapshot`. Adds a feature-gated `Model::with_load_states(ModelLoadStates)` test constructor behind `kanban-domain`'s new `test-helpers` feature. This is a `minor` bump rather than `patch` because it is breaking under the pre-1.0 rule in `.changeset/README.md`: the public type `kanban_view::model::Model` and the public module `kanban_view::model` are removed, and nine public methods move from `Model` to a different type in a different crate. Every crate in `crates/` publishes to crates.io, so external callers of `kanban_view::model::Model` break.
+
+### KAN-1362 Tui Navigation Population (2026-09-28)
+
+tui: fetch a board's subtree on activation, on projects-panel navigation, and on every key that reaches the dispatcher, so a lazily-populated Model stops missing tiers for boards the user selects without changing AppMode
+
+### KAN-1365 Tui Card Board Column Refetch (2026-09-28)
+
+tui: refetch only what a card, board or column mutation invalidated instead of reloading the whole model
+
+### KAN-1366 Tui Sprint Dialog Popup Refetch (2026-09-28)
+
+tui: refetch only what a sprint, dialog or popup mutation invalidated instead of reloading the whole model
+
+### KAN-1374 Name Shared Control Surface As (2026-09-28)
+
+domain: adds a `controller` module that names and re-exports the shared control vocabulary (sort enums, filter/query types and functions) used by every application, disambiguated from `kanban_view::Controller`.
+
+### KAN-1407 Relationship Dialogs Must Treat Loaded (2026-09-28)
+
+tui: relationship dialogs (manage parents, manage children, manage children from list) now refuse to open and raise an error banner instead of silently treating an unloaded dependency graph as empty, which previously disabled cycle filtering and turned every checkbox press into an attach. The card detail view's relationship panel now shows a not-loaded/failed marker instead of a misleading "No parents"/"No children" when the graph tier hasn't loaded yet.
+
+### KAN-1415 Reload Model Must Surface Failed Store (2026-09-28)
+
+tui: a failed store read during a model reload now raises the error banner instead of only logging a warning, so a transient read failure cannot leave the user staring at stale data with no visible feedback.
+
+### KAN-1418 Parent Scoped Third Tier Resolved (2026-09-28)
+
+domain: `Collection<T>` in `resolved.rs` gains a third, parent-keyed tier, `by_parent: HashMap<Uuid, LoadState<Vec<T>>>`, alongside the existing `all` and `by_id`. It lets a resolve pass describe the whole child set of one parent (columns of a board, cards of a column, sprints of a board) without loading the entire collection, which is what makes lazy loading actually lazy. `Default` and `is_untouched` account for the new tier and the hand-written `Default` still works for a `T` that is not `Default`. The change is purely additive: nothing fetches into the tier and nothing consumes it yet. It is a `minor` bump because adding a public field to a public struct that is not `#[non_exhaustive]` is both new public API and breaking for any exhaustive struct literal.
+
+### KAN-1419 Scoped Tiers Loadedentities In Fetch (2026-09-28)
+
+domain: `FetchRound` gains three parent-scoped request vectors, `columns_by_board`, `cards_by_column` and `sprints_by_board`, accounted for in `is_empty()` so a scoped-only round is not mistaken for a halt signal. `LoadedState` gains three matching no-default status accessors, `columns_of_board`, `cards_of_column` and `sprints_of_board`, each returning `FetchStatus` and never `Missing`, since the scoped `DataStore` reads that serve them answer an unknown parent with an empty vector rather than an error. A new `LoadedEntities: LoadedState` trait adds the single payload projection `loaded_columns_of_board(&self, board_id: Uuid) -> Option<&[Column]>`, distinguishing a column-less board (`Some(&[])`) from a board whose columns were never read (`None`). `FetchPlan::next_round` now takes `&dyn LoadedEntities` instead of `&dyn LoadedState`. This is a `minor` bump: it adds public fields to a struct that is not `#[non_exhaustive]`, adds trait methods with no default body which breaks every out-of-tree implementor, and changes a public trait method's signature.
+
+### KAN-1420 Resolve Becomes Stateless Free Function (2026-09-28)
+
+service: adds `kanban_service::resolve(plan, loaded, store) -> Resolved`, a new public free function that runs `FetchPlan` rounds against a `DataStore` without owning any state between calls. It reads whole-collection, per-id and the three parent-scoped tiers, deduping within a call and composing the caller's `LoadedEntities` with the in-flight `Resolved` so a scope discovered mid-call resolves in the same call. `resolve` returns `Resolved` directly rather than a `Result`, since backend failures already surface per-entity as `LoadState::Failed`.
+
+### KAN-1421 Model Invalidate Drops Per Id (2026-09-28)
+
+domain,service: `Model` gains `invalidate(Invalidation) -> ModelChanged`, dropping the flat, per-id and parent-scoped tiers named by an `Invalidation`. A card, column or sprint id drops that kind's whole affected parent-scoped tier (`cards_by_column`, `columns_by_board`, `sprints_by_board`) rather than guessing which single scope moved, since `EntityIds` names child ids, not the parent key a scoped tier is keyed on. Where the named id is itself a parent key the drop is exact: a column id drops only its own `cards_by_column` entry, and a board id drops only its own `columns_by_board`/`sprints_by_board` entries. `scoped_card_index` entries are cleared alongside every `cards_by_column` drop. `Invalidation::All` and an empty `EntityIds` both reset the whole `Model`. The snapshot-derived archival markers are left untouched by an ordinary invalidation. `kanban-service` gains a cross-backend contract test proving a card moved between columns reads correctly on in-memory, JSON and SQLite after `invalidate` runs.
+
+### KAN-1424 Mutations Return Invalidation Kanbancontext Resolve (2026-09-28)
+
+service: `KanbanContext::execute`, `execute_with`, `execute_with_extra`, `reload`, `replace_backend` and `migrate_sprint_logs` now return the `Invalidation` they computed instead of discarding it, and every mutating `*_impl` inherent method is now `pub` and returns its value paired with the `Invalidation`. `KanbanContext::resolve` is a new thin wrapper over the standalone `kanban_service::resolve` function, so a caller holding a `KanbanContext` can drive a resolve pass without threading the backend through separately.
+
+### KAN-1425 Fault Injecting (2026-09-28)
+
+service: add `FaultInjectingBackend` under the `test-helpers` feature, a wrapper over any `Arc<dyn KanbanBackend>` that makes named `DataStore` reads fail on demand and records every intercepted read in call order. It lets the cross-backend contract suite prove that a store error resolves to `Failed` rather than `Missing` on JSON and SQLite, not just in-memory, and lets downstream tests assert that a read did not happen at all. Every trait method delegates to the wrapped backend, including the defaulted ones that real backends override, so the wrapper stays transparent.
+
+### KAN-1426 Resolve Invalidate Parity Contract Across (2026-09-28)
+
+domain,service: add a resolve/invalidate parity contract harness that pins `resolve`'s `LoadState` mapping (absent card/column/sprint resolves to `Missing`, a backend read or list error resolves to `Failed`, `Missing` is terminal, `Failed` is retried) across the in-memory, JSON, and SQLite backends, and document the archival semantics of `DataStore::get_card` and `DataStore::list_all_cards` on the trait itself.
+
+### KAN-1427 Tuicontext Forwards Context Sync Path (2026-09-28)
+
+kanban-tui: `TuiContext` gains two thin forwarding methods, `sync` and `sync_invalidated`, delegating to the identically named `KanbanContext` methods. This gives the TUI its only production path to the resolve-and-apply-and-resync seam, mirroring the pass-through pattern already used by `kanban-cli` and `kanban-mcp`. Both methods take `&self` and never touch the save coordinator, since a read must never queue a save.
+
+### KAN-1428 View Scope (2026-09-28)
+
+tui: adds `ViewScope`, kanban-tui's first production `kanban_service::FetchPlan` driver, and `App::view_scope`, which maps the current `AppMode`/`DialogMode`/`SelectionHub` state onto a `FetchRound` covering both the flat tiers the renderer reads and the by-parent tiers the handlers read.
+
+### KAN-1429 Render First Frame Partially Loaded (2026-09-28)
+
+domain, tui: `App::load_initial_state` now runs two scoped `populate` passes over the board list and the auto-selected board's subtree instead of one whole-store `snapshot` read, and `check_ended_sprints` declines on a `NotLoaded` sprint tier instead of scanning it through the collapsing `Model::sprints()` accessor. Startup no longer loads archival markers at all; entering the archived-boards or archived-cards view instead triggers a `reload_model` snapshot on first entry, gated by the new `Model::archived_boards_absorbed` / `Model::archived_card_markers_absorbed` predicates so a later mutation-driven reload is not repeated.
+
+### KAN-1431 Render Notloaded Failed Distinctly Empty (2026-09-28)
+
+tui: distinguish NotLoaded, Failed and Missing panel states from a genuinely empty Loaded collection, so a board or sprint tier that has not been fetched yet no longer renders the same "nothing here" message as one that is truly empty.
+
+### KAN-1432 Panel Titles Never Print Count (2026-09-28)
+
+view,tui: `TasksPanelTitle.count` is now a `PanelCount` (`Known`/`NotLoaded`/
+`Failed`) instead of a bare `usize`, so the tasks panel title never prints a
+confident `(0)` for a card, column, or sprint tier that has not loaded or has
+failed to load. `build_filter_title_parts` resolves active sprint filter
+names through the board-scoped sprint tier so an active filter always shows a
+label even when that tier is unloaded.
+
+### KAN-1434 Delete Model Columns Model Sprints (2026-09-28)
+
+domain: deletes `Model::columns()` and `Model::sprints()`, the collapsing accessors that silently flattened `NotLoaded`/`Missing`/`Failed` states into an empty slice. Every caller now goes through `columns_state()`/`sprints_state()` (or `.loaded_or_empty()` directly), matching the pattern already established for `boards()`, `all_cards()`, and `graph()`. A source-text guard test pins both accessors' absence. tui: the fallout from the deletion is mechanical, replacing every `X.columns()`/`X.sprints()` call site (all of them in test code) with `X.columns_state().loaded_or_empty()`/`X.sprints_state().loaded_or_empty()`, with no assertion's expected value changed.
+
+### KAN-1435 Re Express Apply Snapshot Prefix Contract (2026-09-28)
+
+service,backend-memory,persistence-sqlite: re-express the prefix contract
+suite over `write_full_snapshot` instead of `DataStore::apply_snapshot`.
+`test_apply_snapshot_stores_prefix_rows_normalised` and
+`test_apply_snapshot_collapses_two_spellings_of_one_namespace` are renamed to
+`test_a_whole_store_write_stores_prefix_rows_normalised` and
+`test_a_whole_store_write_collapses_two_spellings_of_one_namespace`.
+`test_a_referenced_namespace_cannot_be_removed_on_every_backend` is removed
+and its guarantee is split into a new per-backend `apply_snapshot` rejection
+test in `kanban-backend-memory` and `kanban-persistence-sqlite`, plus two new
+cross-backend contract functions pinning `write_full_snapshot`'s merge
+semantics: it never removes a namespace and still rejects a card whose
+namespace has no backing row.
+
+### KAN-1436 Kanbancontext Transfer State To Per Backend Pair (2026-09-28)
+
+service: add `KanbanContext::transfer_state_to`, copying the whole workspace onto another `DataStore` by composing `read_full_snapshot`/`write_full_snapshot`. Upserts into the target rather than clearing it first, and runs no FK repair.
+
+### KAN-1437 Compose Whole Store Export Atomic (2026-09-28)
+
+service: route the whole-store export branch of `export_board(None)` through `read_full_snapshot` instead of `DataStore::snapshot`, and add a new `KanbanContext::export_all_boards()` that composes an `AllBoardsExport` directly, matching the two-step snapshot-then-convert flow callers previously had to do by hand.
+
+### KAN-1438 Mark Dirty Primitive Backend Can Flushed (2026-09-28)
+
+backend,persistence-json,service: `KanbanBackend` gains a defaulted `mark_dirty()` method, so a backend can be marked dirty and later flushed without routing a fake empty snapshot through `apply_snapshot` just to trip the dirty flag. `JsonDataStore` overrides it to set its real dirty flag; `FaultInjectingBackend` delegates it to the wrapped backend.
+
+### KAN-1439 Seed Empty Storage File Mark Dirty (2026-09-28)
+
+cli: seed a freshly created storage file's dirty flag via the `KanbanBackend::mark_dirty` primitive instead of a `needs_save_worker`-guarded `apply_snapshot(Snapshot::new())` call, so every backend gets the same unconditional write on `kanban init`.
+
+### KAN-1440 Route Board Export Through Kanbancontext (2026-09-28)
+
+tui: adds `TuiContext::export_all_boards`, a pass-through to `KanbanContext::export_all_boards`, and points board export (single-board, export-all, and auto-save) at it instead of building the export from a raw `DataStore::snapshot` call.
+
+### KAN-1441 Seed Adopted Storage File Transfer State To (2026-09-28)
+
+kanban-tui: route the storage-adoption dialog's `adopt_storage_file` through the new `TuiContext::transfer_state_to` instead of a whole-store `snapshot`/`apply_snapshot` round trip, replace the post-seed readability probe with `backend.list_boards()`, and explicitly `mark_dirty()` the seeded backend so the queued flush writes to disk even for an empty workspace.
+
+### KAN-1442 Drop Write Back Hydration Storage (2026-09-28)
+
+tui, persistence: drop the whole-store write-back hydration from storage migration.
+
+`handle_migration_complete` no longer probes the incoming backend by reading a
+whole `Snapshot` and writing it back into `App`. The pre-swap readability
+check is now a narrow `list_boards()` call, and the sort-field/order sync
+that used to ride along in the write-back reads directly from the new
+backend via `data_store().get_board(..)` instead. This removes the public
+`kanban_tui::state::TuiSnapshot` trait and `crates/kanban-tui/src/state/snapshot.rs`
+entirely; its serialization round-trip test moves to `kanban-persistence`,
+where the functions it exercises already live.
+
+### KAN-1444 Remove Snapshot Apply Snapshot Datastore Delete (2026-09-28)
+
+domain, backend, backend-http, backend-memory, cli, persistence-json,
+persistence-sqlite, service, tui: removes `snapshot`/`apply_snapshot` from
+the `DataStore` trait's required surface and deletes the 24 impl pairs
+across every backend and test double that satisfied it. Every whole-store
+read/write already went through `store_adapter::read_full_snapshot` /
+`write_full_snapshot`, which compose per-entity `DataStore` calls instead
+of a single whole-store method, so this is a pure trait-surface reduction
+with no caller to repair. `kanban_domain::Snapshot`, the type, is
+unaffected and stays.
+
+### KAN-1445 Kanbancontext Sync (2026-09-28)
+
+service: `KanbanContext::sync` and `KanbanContext::sync_invalidated` are new inherent methods that run a `FetchPlan` against a `Model` and fold the resolved entities back in, resyncing the caller's `DerivedProjections` with the `ModelChanged` receipt. `sync_invalidated` applies its `Invalidation` before the plan is consulted, so a tier a mutation touched is refetched instead of being left `Loaded` and skipped. Every application now shares one resolve-application step and none of them needs a `&dyn DataStore`.
+
+### KAN-1446 Cli Controller Argv Becomes Commandscope (2026-09-28)
+
+cli: `kanban-cli` becomes a Controller. A new `pub(crate) CommandScope` folds the parsed `Commands` value into a `kanban_service::FetchPlan`, `CliContext` gains a `kanban_domain::Model` plus the stored scope, and `dispatch_subcommand` syncs the Model once before dispatch. The `mutate`/`mutate_unit` seam now applies its returned `Invalidation` into the Model via `KanbanContext::sync_invalidated` instead of discarding it. `KanbanOperations::resolve_board_id` and `GraphOperations::list_children_of`/`list_parents_of` are retargeted to read from the Model's `board_list` and `graph` tiers, behind a shared `pub(crate)` `require_loaded` helper. No public API changes.
+
+### KAN-1449 Relocate Fetch Vocabulary Kanban Domain (2026-09-28)
+
+domain,service: relocate the fetch-planning vocabulary (`FetchPlan`, `FetchRound`, `FetchStatus`, `LoadedState`, `LoadedEntities`, `requestable`) from `kanban-domain` to `kanban-service`. No behavioural change; this is a pure module move. The bump is minor because `kanban-domain` loses seven public items and `kanban-service` gains new public API, and pre-1.0 that qualifies as breaking.
+
+### KAN-1450 Delete Unadopted Entitycache (2026-09-28)
+
+service: remove the unadopted `EntityCache`, deleting the `pub mod cache` module and the `pub use cache::EntityCache` re-export. The module was built with a full test suite but was never wired to anything, and the topology it belonged to was retired when the Model became the single store. Because it removes a public item from a published crate, this is a breaking change for out-of-tree callers and takes a `minor` bump under the pre-1.0 policy, even though nothing in this workspace imported it.
+
+### KAN-1451 Repoint Consumers At Returned Invalidation (2026-09-28)
+
+domain,service,mcp,tui: `Invalidation` is now `#[must_use]`, and `KanbanContext::undo`/`redo` return `KanbanResult<Option<Invalidation>>` instead of `KanbanResult<bool>`, carrying the invalidation the reversed or replayed batch implies rather than discarding it. `KanbanContext::last_invalidation` and its backing field are removed; every caller now reads the value returned from `execute`, `execute_with`, `execute_with_extra`, `undo`, or `redo` directly. `McpContext::undo`/`redo` forward the same `Option<Invalidation>` return type. `TuiContext::undo`/`redo` are unchanged and still return `bool`, since kanban-tui has no consumer for the invalidation yet.
+
+### KAN-1453 Cross Backend Parity Resolve S (2026-09-28)
+
+service: add cross-backend parity contract tests for `resolve`'s scoped tiers (columns-by-board, cards-by-column, sprints-by-board), pinning that every backend agrees on scoped-graph shape, archived-card exclusion, unknown-parent-is-empty, and failed-read-is-Failed-not-empty semantics
+
+### KAN-1455 Unscoped Card Search Must Match (2026-09-28)
+
+domain,service: an unscoped `CardListFilter` search (no `board_id`) now filters cards by their own board instead of silently admitting every card. `filter_and_sort_cards` and `count_filtered_cards` gain a `boards: &[Board]` lookup slice, positioned after `board: Option<&Board>`, that each card's own board is resolved from when the search predicate runs; a card whose board is not present in the slice is excluded rather than admitted. The service tier gathers that boards slice, plus the cross-board sprint set, on the unscoped search path. Because this changes the signature of two public functions re-exported from `kanban-domain`, it takes a `minor` bump under the pre-1.0 policy.
+
+### KAN-1457 Invalidation Plan (2026-09-28)
+
+kanban-service adds `InvalidationPlan`, a `FetchPlan` built from an `Invalidation` plus a pre-invalidation `LoadedState` snapshot. It re-requests exactly the tiers `Model::invalidate` is about to blank, restricted to tiers the model had already read, so a mutation only refetches what was actually visible before it ran.
+
+### KAN-1458 Resync Invalidated (2026-09-28)
+
+kanban-service adds `KanbanContext::resync_invalidated`, a mutate-then-read sibling of `sync_invalidated` that repairs the tiers a `Model` had already read before an `Invalidation` blanks them, then runs the caller's own `FetchPlan`, folding both passes through one `resync` call.
+
+### KAN-1459 Cross Backend Semantic Parity Resolve (2026-09-28)
+
+service: add fifteen cross-backend contract tests under `test_helpers::contract::cache` pinning `resolve`'s semantic parity, not just its `LoadState` mapping, across the in-memory, JSON and SQLite backends. Covers scoped-vs-list read agreement, archival/reversibility identity (including a full `assert_card_eq` round trip through delete/undo and archive/restore), the dependency graph tier (including edges with an archived endpoint), reopen-after-flush freshness, and invalidation scoping. No production code changed.
+
+### KAN-1460 Expose Read Full Snapshot Write Full Snapshot Under Test (2026-09-28)
+
+service: expose `read_full_snapshot` and `write_full_snapshot` as public functions, re-exported from the crate root under the existing `test-helpers` feature, so integration-test crates outside `kanban-service` can seed and read a full workspace snapshot directly.
+
+### KAN-1461 Rewire In Memory Test Callers (2026-09-28)
+
+backend-memory: rewire the 14 test-only callers of `InMemoryStore::snapshot`/`apply_snapshot` onto the already-public inherent methods `snapshot_impl`/`apply_snapshot_impl`, so the tests no longer depend on the `DataStore` trait methods slated for removal.
+
+### KAN-1462 Rewire Backend Snapshot Test Callers (2026-09-28)
+
+kanban-persistence-json, kanban-persistence-sqlite, kanban-persistence: rewire the test call sites off `DataStore::snapshot`/`apply_snapshot` onto their backend-specific replacements (`snapshot_async`/`apply_snapshot_async`, `read_full_snapshot`/`write_full_snapshot`, `snapshot_impl`), and widen `SqliteStore::snapshot_async`/`apply_snapshot_async` from `pub(crate)` to `pub` so a separate crate's tests can call them directly.
+
+### KAN-1463 Rewire Contract Integration Test Callers (2026-09-28)
+
+service: rewire kanban-service's cross-backend contract tests and integration tests off `DataStore::snapshot`/`apply_snapshot` onto `read_full_snapshot`/`write_full_snapshot`, and onto scoped per-collection reads where that is what the test already asserts. Test-only change; `KanbanContext::snapshot`/`apply_snapshot` and the `prefix.rs` contract are untouched.
+
+### KAN-1464 Rewire Last Callers Delete Four (2026-09-28)
+
+cli,tui,service: rewire the last test call sites off `KanbanContext::snapshot`/`apply_snapshot` and `TuiContext::snapshot`/`apply_snapshot` onto `kanban_service::read_full_snapshot`/`write_full_snapshot`, then delete all four whole-store pass-throughs.
+
+### KAN-1465 Model Per Id And Scoped Tiers (2026-09-28)
+
+domain: `Model` gains a per-id tier and a parent-scoped tier for boards, columns, cards and sprints, alongside the flat collections it already held. `apply_resolved` applies all three independently, `load_from_snapshot` clears the new tiers so a whole-store load supersedes every tier, and `mark_failed` marks the flat collection, the per-id entries and the parent scopes without removing any of them. New public accessors expose each tier's `LoadState` so a caller can tell a scope that was never read from one that resolved empty. A `scoped_card_index` maps a card id to the column scope holding it, which keeps the per-id lookup chain from scanning every scope.
+
+### KAN-1466 Model Loaded State (2026-09-28)
+
+service: `Model` now implements `LoadedState` and `LoadedEntities` from `kanban_service::fetch_plan`, so a `resolve` call can read fetch status and loaded columns directly off the domain `Model` instead of only off the `resolve`-internal `Overlay`.
+
+### KAN-1467 Model Changed Receipt (2026-09-28)
+
+kanban-domain, kanban-view, kanban-tui: `Model::apply_resolved`, `Model::mark_failed` and `Model::load_from_snapshot` now return a `#[must_use]` `ModelChanged` receipt instead of `()`. A new one-method `DerivedProjections` trait consumes that receipt, with a `NoProjections` no-op implementor for callers with nothing to derive. `kanban-view`'s inherent `Controller::sync` is replaced by `impl DerivedProjections for Controller`, so forgetting to recompute derived state after a `Model` mutation is now a compile-time lint rather than a doc-comment plea.
+
+### KAN-1469 Live Boards Load State (2026-09-28)
+
+kanban-domain, kanban-tui: replace the collapsing `Model::live_boards()` with `Model::live_boards_state()`, which reports `NotLoaded`/`Failed` instead of flattening every non-loaded state into an empty iterator. Every kanban-tui call site now distinguishes "not loaded yet" from "loaded and genuinely empty".
+
+### KAN-1470 Controller Partition Load State (2026-09-28)
+
+kanban-view, kanban-tui: `Controller::displayed_cards`/`displayed_boards`/`live_cards`/`archived_cards`/`archived_boards_view` now return `LoadState<&[Card]>`/`LoadState<&[Board]>` instead of a bare slice or iterator, and `App::displayed_cards`/`displayed_boards` mirror that as `LoadState<&[Card]>`/`LoadState<Vec<Board>>`. A freshly defaulted or unsynced `Controller` now reports its partitions as `NotLoaded` instead of silently collapsing them to empty. Every `kanban-tui` call site collapses explicitly at the render boundary with `.loaded().copied().unwrap_or(&[])` (or `.loaded().into_iter().flatten()` where an iterator is needed), a temporary marker for KAN-1431 to replace with an explicit not-loaded/failed render. `App::prepare_frame` declines to rebuild the task lists when the card, column, or sprint tier is not `Loaded`, matching the existing columns/sprints decline rule.
+
+### KAN-1473 Graph And Board Spec Mutations Return Invalidation (2026-09-28)
+
+service: `KanbanContext` gains six `pub` inherent graph mutators
+(`attach_children_impl`, `detach_children_impl`, `block_impl`, `unblock_impl`,
+`relate_impl`, `dissociate_impl`) returning `KanbanResult<Invalidation>`, with
+the `GraphOperations` trait impl reduced to thin discards over them.
+`create_board_from_spec` now returns `(Board, Invalidation)` and
+`create_or_replace_board` now returns `(BoardCreateOutcome, Invalidation)`;
+the internal `create_board_from_spec_returning` helper is removed.
+
+### KAN-1474 Cli Mutation Seam (2026-09-28)
+
+cli: introduces `CliContext::mutate`/`mutate_unit`, the sole internal seam through which every mutating handler now consumes the `Invalidation` a mutation returns. No public API changes; all mutation call sites in `handlers/` and `app.rs` route through the new `pub(crate)` seam instead of the `KanbanOperations`/`GraphOperations` trait methods directly.
+
+### KAN-1475 Mcp Mutation Seam (2026-09-28)
+
+mcp: every mutating tool handler now goes through a new `McpContext::mutate` / `mutate_unit` seam that hands the tool the `(value, Invalidation)` pair a service `*_impl` call produces, replacing the `mutating_op!` macro (deleted). `McpContext::create_board_from_spec`, `create_column_from_spec`, `create_card_from_spec`, and `create_sprint_from_spec` are removed; tool handlers now call the equivalent `KanbanContext` method directly through `mutate`.
+
+### KAN-1476 Server Mutation Seam (2026-09-28)
+
+server: route every mutation site through a single `mutate`/`mutate_unit` seam in `state.rs` that owns the `Invalidation` a mutation produces, instead of calling `KanbanOperations` trait methods or raw inherent `*_impl` methods directly from the routes and handlers.
+
+### KAN-1477 Resolver Fetches Archived By Board (2026-09-28)
+
+domain,service: `Resolved` gains a fourth tier, `archived_cards: Collection<ArchivedCard>`, and `FetchRound` gains the two request fields that fill it, `archived_card_list: bool` and `archived_cards_by_board: Vec<Uuid>`. The resolver populates the flat tier from `DataStore::list_archived_cards` and the board-scoped tier from `list_archived_cards_by_board`, mapping a read error to `LoadState::Failed` rather than collapsing it to an empty list. Nothing in `Model`, `LoadedState` or `Overlay` changes, so nobody consumes the new tier yet. It is a `minor` bump because adding public fields to public, non-`#[non_exhaustive]` structs on crates that publish to crates.io is both new public API and breaking for any exhaustive struct literal.
+
+### KAN-1478 Model Archived Card Tier (2026-09-28)
+
+domain,service: `Model` gains a board-scoped archived-card marker tier
+(`board_archived_cards_state`, `archived_cards_state`), applied from a
+resolve pass's `archived_cards.by_parent`, cleared on `load_from_snapshot`
+and marked `Failed` alongside the rest of the card tier by `mark_failed`.
+`LoadedState` gains two new required methods, `archived_card_list` and
+`archived_cards_of_board`, implemented on `Model` and `Overlay`, letting a
+fetch plan see an already-loaded archived scope and stop refetching it on
+a later resolve call within the same process.
+
+### KAN-1479 Invalidate Drops Archived Tier (2026-09-28)
+
+domain,service: `Model::invalidate` now drops the board-scoped `archived_cards_by_board` tier alongside the sibling `columns_by_board`/`sprints_by_board`/`cards_by_column` tiers, since a `cards` or `boards` id in `EntityIds` previously left it stale and could serve a just-restored card as still archived until the whole model was reset. `kanban_service::test_helpers::contract::cache` gains a new public `ArchivedByBoardPlan` and two contract functions, registered in `cache_contract_tests!`, that hold the fix and the board-scoping of `list_archived_cards_by_board` to one spec across the in-memory, JSON and SQLite backends. This is `minor`, not `patch`, because it adds new public surface (`ArchivedByBoardPlan`, two `pub async fn` contract functions, two macro arms) on a crate published to crates.io, following the precedent set by KAN-1426.
+
+### KAN-1480 Mcp Tool Scope And Model Resolvers (2026-09-28)
+
+mcp: adds `McpContext::model_for`, `sync_into` and `sync_invalidated`, three new public methods for building and refreshing a call-scoped `Model` over the shared `KanbanContext::sync`/`sync_invalidated` seam. No tool body changes; leaves the seven `mcp_resolve_*` shims and every tool untouched.
+
+### KAN-1481 Mcp Board Tools Read Model (2026-09-28)
+
+mcp: retarget board.rs's four name-resolution call sites (tool_get_board,
+tool_update_board, tool_delete_board, tool_archive_board) from the
+McpResolve::mcp_resolve_board shim to a call-scoped Model built through a new
+ToolScope per request. A failed or unfetched board-list read now surfaces an
+error naming "board list" instead of collapsing into a raw backend error.
+
+### KAN-1482 Mcp Card Crud Tools Read Model (2026-09-28)
+
+kanban-mcp: card_crud tools resolve board/column/sprint/card names through the call-scoped Model instead of issuing a whole-collection backend read per call, mirroring the merged board.rs and card_batch.rs shape.
+
+### KAN-1483 Mcp Card Batch Read Model (2026-09-28)
+
+mcp: retarget card_batch.rs's name-resolution call sites (tool_archive_cards,
+tool_move_cards, tool_assign_cards_to_sprint, tool_assign_card_to_sprint) from
+the McpResolve shim to a call-scoped Model built through ToolScope, and fix
+resolve_cards to require the card-list tier lazily so an all-uuid batch no
+longer trips an unfetched-tier error. A failed or unfetched column/sprint
+collection read now surfaces an error naming "columns of the board" or
+"sprints of the board" instead of a raw backend error. Singular card
+identifier resolution (tool_unassign_card_from_sprint, and the card lookup
+inside tool_assign_card_to_sprint) is left on the indexed
+KanbanOperations::resolve_card_id path rather than moved to the Model, since
+that path is already an indexed lookup and migrating it would trade an
+indexed read for a full collection scan with no correctness gain.
+card_relations.rs is unchanged: it has zero McpResolve shim call sites and its
+graph reads already surface a failed read as an error.
+
+### KAN-1484 Column Tools Model (2026-09-28)
+
+mcp: column tools resolve board and column names through the call-scoped Model instead of the legacy backend-direct resolvers, matching the pattern already in place for board and card_batch tools. Behavior and JSON output are unchanged; a failed backend read during resolution now names the collection that could not be loaded instead of surfacing the raw backend error text.
+
+### KAN-1485 Mcp Sprint Tools And Shim Removal (2026-09-28)
+
+mcp: retarget every sprint tool and `tool_export_board` off the `McpResolve` shim onto the call-scoped `Model` built via `ToolScope`/`ToolScoped`, delete the now-dead `McpResolve` trait and the unused `ToolScope::renders_board_entity` field, and fix a `ToolScope::next_round` gap where a named global sprint reference never requested the board list needed to resolve it.
+
+### KAN-1486 Tool Scope By Parent Second Round (2026-09-28)
+
+mcp: `ToolScope` gains `resolved_board`, `wants_board_columns`, `wants_board_sprints` and a `for_board` builder so a second sync round can request `columns_by_board`/`sprints_by_board` once a board reference is resolved, fixing `resolve_column_in_board` and `resolve_sprint_in_board` so they actually resolve a name reference. No public API added; `scope` stays `pub(crate)`.
+
+### KAN-1487 Tui App Reads Decline Not Loaded (2026-09-28)
+
+tui: populate_sprint_task_lists, copy_card_output, and get_current_sprint_selection_index now read the columns/sprints tiers through the state-preserving accessors instead of the collapsing `Model::columns()`/`Model::sprints()`, so a `NotLoaded` tier is declined with an error banner (where the call site can signal one) rather than silently treated as empty.
+
+### KAN-1488 Tui Prepare Frame Declines Once (2026-09-28)
+
+tui: `App::prepare_frame` now declines to rebuild the task lists when the columns or sprints tier is not loaded, instead of silently collapsing to an empty collection.
+
+### KAN-1489 Detail View Handlers Decline On Unloaded Tiers (2026-09-28)
+
+tui: board detail, card detail, sprint detail and manage-parents/children handlers now decline with an error banner when the columns or sprints tier they need is not loaded, instead of silently treating an unloaded tier as empty.
+
+### KAN-1490 Card Handler Reads Decline (2026-09-28)
+
+tui: card_handlers.rs no longer collapses a NotLoaded columns or sprints
+tier to an empty collection when creating, moving, restoring, or assigning
+a card, or when opening the manage-children picker. An unloaded tier now
+sets an error banner and leaves the prior state untouched instead of
+silently acting as if the board had zero columns or sprints.
+
+### KAN-1491 Tui Column Board Handler Reads Decline (2026-09-28)
+
+tui: the 9 `Model::columns()`/`Model::sprints()` reads in `column_handlers.rs` and `board_handlers.rs` now decline with an error banner on a `NotLoaded` tier instead of silently treating it as empty. `handle_delete_column_key`, `handle_move_column_up`, `handle_move_column_down`, `create_column`, and `delete_column` read the board-scoped columns tier; the internal `board_delete_counts` helper now returns `None` when its columns or sprints tier is unloaded, and its two callers (`handle_delete_board_key`, `handle_delete_archived_board_key`) decline in step.
+
+### KAN-1492 Sprint Popup Handler Reads Decline (2026-09-28)
+
+tui: sprint and sprint-popup handlers (`handle_activate_sprint_key`, `handle_complete_sprint_key`, `handle_carry_over_for_sprint`, `create_sprint`, `handle_assign_card_to_sprint_popup`, `handle_assign_multiple_cards_to_sprint_popup`, `handle_carry_over_sprint_popup`) now read sprints through the state-preserving `Model` accessors instead of the collapsing `Model::sprints()`, so a `NotLoaded` sprint tier surfaces an error banner instead of silently behaving as an empty collection.
+
+### KAN-1493 Dialog Filter Handler Reads Decline (2026-09-28)
+
+tui: dialog and filter handlers now surface an error banner instead of silently treating unloaded sprint data as empty
+
+### KAN-1494 Mcp Card Relations Read Model (2026-09-28)
+
+mcp: retarget the four card_relations tools (set/remove card parent, list card parents/children) at the call-scoped Model instead of the raw KanbanContext. Card identifier resolution now goes through helpers::model_read::resolve_card, and the parent/child edge read goes through Model::graph_state() via require_loaded instead of ctx.list_parents_of/list_children_of. A NotLoaded or Failed card list or dependency graph tier now surfaces as an error naming the collection instead of the tool reporting a false "not found" or silently returning an empty relation list.
+
+### KAN-1495 Board Scoped Tiers (2026-09-28)
+
+domain: `Model::load_from_snapshot` now populates the board-scoped columns
+and sprints tiers by grouping the snapshot's flat rows by board id, instead
+of leaving them cleared and empty after every load.
+
+### KAN-1496 Archived Boards Fetch Tier (2026-09-28)
+
+domain,service: add an archived-boards fetch tier mirroring the archived-card tier: `FetchRound.archived_board_list`, `Resolved.archived_boards`, a resolve arm over `DataStore::list_archived_boards`, and an `apply_resolved` path that feeds `Model::archived_boards`/`archived_board_ids` on load and records a Failed read without disturbing previously loaded markers. Also applies the flat `resolved.archived_cards.all` tier into the Model, which was previously fetched but silently dropped, and removes the permissive `Ok(Vec::new())` default on `DataStore::list_archived_boards`, making every backend implement it explicitly.
+
+### KAN-1497 Archived Card Markers Over Http (2026-09-28)
+
+api,server,backend-http: add `ArchivedCardResponse` and a
+`GET /v1/boards/{board_id}/archived-cards` route, then wire
+`HttpBackend::list_archived_cards_by_board` to call it so the remote
+backend can serve the board-scoped archived-card tier instead of
+returning `Unsupported`.
+
+### KAN-1498 Tui Cards Boards Tier Decline (2026-09-28)
+
+tui: the 19 remaining `loaded_or_empty()` reads on the cards/boards tiers in kanban-tui's handlers and app modules now handle `LoadState` explicitly. Acting handlers decline with a "not loaded yet" banner and leave state unchanged when their cards or boards tier is not loaded; per-frame and read-only search paths skip silently; the shared test fixture that seeds `active_board_id` now panics loudly instead of silently producing `None` if boards were never loaded.
+
+### KAN-1499 Service Creators Return Invalidation (2026-09-28)
+
+service: create_card_from_spec, create_or_replace_card, create_column_from_spec, create_or_replace_column, create_sprint_from_spec and create_or_replace_sprint on `KanbanContext` now return `KanbanResult<(T, Invalidation)>` instead of `KanbanResult<T>`, mirroring the existing create_board_from_spec / create_or_replace_board precedent. Every caller in kanban-mcp, kanban-server and kanban-cli discards the invalidation explicitly for now.
+
+### KAN-1500 Server Session Model (2026-09-28)
+
+server: hold the shared Model beside the context in one Session guard
+
+### KAN-1501 Server Routescope (2026-09-28)
+
+server: add RouteScope FetchPlan and model_read helpers over the shared Model, unconsumed until slices c-g wire the routes
+
+### KAN-1502 Server Boards Graph Model Reads (2026-09-28)
+
+the board and card-graph read routes serve their responses from the shared session Model instead of reading the context directly
+
+### KAN-1503 Server Column Model Reads (2026-09-28)
+
+server: the column read routes (list, get, and the flat get) now read the shared session Model instead of calling the KanbanContext directly, keeping every response byte-identical while populating the Model for later reads in the same request.
+
+### KAN-1504 Server Sprint Model Reads (2026-09-28)
+
+server: sprint read routes now read the shared session Model instead of locking the context directly
+
+### KAN-1505 Server Card Model Reads (2026-09-28)
+
+server: card GET routes read through the session Model via RouteScope
+
+### KAN-1506 Server Mutation Applies Invalidation (2026-09-28)
+
+server: apply the mutation seam's Invalidation to the shared session Model so a mutating request drops exactly the tiers it touched
+
+### KAN-1508 Tui Archived Bodies Fetchable (2026-09-28)
+
+TUI archived card and board bodies are now fetchable without a full-store snapshot, walking the already-fetchable archival marker ids into per-id fetches
+
+### KAN-1509 Populate On Transition (2026-09-28)
+
+tui: fix stale-tier dialogs by populating the ViewScope on every mode and dialog transition
+
+### KAN-1512 Mcp Indexed Card Resolution (2026-09-28)
+
+mcp: resolve single-card identifiers through the indexed lookup instead of the full card list
+
+### KAN-1514 Empty Entities Noop (2026-09-28)
+
+an empty entities invalidation no longer resets the whole model
+
+### KAN-1515 Bound Undo Stack (2026-09-28)
+
+service: the per-session undo stack is now capped at 100 entries, dropping the oldest batch when it overflows. kanban-server holds one process-wide context and never drains the stack, so every HTTP mutation previously retained a command batch plus its captured inverse state for the life of the process. Interactive undo is unaffected: the TUI applies one entry per keypress, so 100 levels is effectively unlimited for a session.
+
+### KAN-1516 Http Archived Missing Board (2026-09-28)
+
+HttpBackend returns an empty list for archived cards of a missing board, matching every local backend
+
+### KAN-1517 Cli Mutation Seam (2026-09-28)
+
+route CLI mutations and the detailed batch invalidations through the shared seam
+
+### KAN-1519 Tui Sprint Tier Mismatch (2026-09-28)
+
+fix the sprint task panel so a filter cursor and rendered list can no longer come from different tiers
+
+### KAN-1520 Tui Graph And Search Collapses (2026-09-28)
+
+fix TUI relationship views to distinguish a cold graph/cards tier from zero parents, children, or search matches
+
+### KAN-1521 Tui Popup Silent Failures (2026-09-28)
+
+fix the assign-to-sprint dialogs no longer close silently on an unloaded card or board, and the active card selection no longer clears on a transient load failure
+
+### KAN-1522 Tui Column And Confirm Reads (2026-09-28)
+
+fix column and delete-count reads that silently ignored a loaded board-scoped tier
+
+### KAN-1523 Mcp Archived Descendant Filter (2026-09-28)
+
+MCP name resolvers ignore archived-board columns, sprints, and cards
+
+### KAN-1524 Mcp Sprint In Board Archived (2026-09-28)
+
+mcp resolves sprint-in-board by name/number when the board is archived
+
+### KAN-1525 Mcp Ambiguity Labels (2026-09-28)
+
+mcp: named column lookups now resolve ambiguity against real board names instead of (unknown)
+
+### KAN-1526 Transfer Transactional (2026-09-28)
+
+service: `KanbanContext::transfer_state_to` now takes the target as `&dyn KanbanBackend` instead of `&dyn DataStore` and runs the whole snapshot write inside `target.with_transaction(..)`, so a mid-write referential-integrity failure rolls the target back to unchanged instead of leaving it half-populated. tui: `TuiContext::transfer_state_to` takes the same new parameter type; its one caller in `App::adopt_storage_file` now passes the backend directly.
+
+### KAN-1527 Write Snapshot Graph Merge (2026-09-28)
+
+transfer_state_to no longer wipes the target's existing dependency graph edges
+
+### KAN-1528 Invalidate Drops Archival Markers (2026-09-28)
+
+invalidate drops the flat archival-marker tiers on the entities path
+
+### KAN-1529 Partition Honest Archival Loadstate (2026-09-28)
+
+controller archived partitions report the join of the collection and marker load states
+
+### KAN-1530 Resync Honours Modelchanged (2026-09-28)
+
+domain,view,tui: `ModelChanged` now carries whether the mutator that minted it actually wrote, exposed as `any()`, and `merge` folds two receipts by disjunction instead of discarding the second one. `apply_resolved` of an untouched `Resolved` and `invalidate` of an empty `EntityIds` report unchanged, while `load_from_snapshot`, `invalidate(Invalidation::All)` and every touched `apply_resolved` still report changed. `Controller::resync` skips rebuilding the archived-at side map and both live/archived partitions when the receipt reports unchanged, so a keystroke that mutates nothing no longer clones every `Card` and `Board` and re-sorts both board partitions. `Model` gains `replace_with`, and `App::reload_model`'s failure-rollback now restores the pre-reload model through that receipt-returning call instead of a direct field assignment paired with a no-op `apply_resolved` used purely to force a rebuild.
+
+### KAN-1533 Tui Delete Highlighted Board Scope (2026-09-28)
+
+tui: scope the delete-board confirmation's transition fetch to the highlighted board rather than the active one, so archiving a board other than the one currently open stops failing with "Board contents are not loaded yet"
+
+### KAN-1535 Server One Backend Kind Decision (2026-09-28)
+
+the file watcher and the per-request Model reset now share one backend-kind decision derived from the registered store manager, so a JSON file at a .db name is watched for external writes instead of silently serving stale data
+
+### KAN-1536 Sse Invalidation Frames (2026-09-28)
+
+api: `ChangeEventFrame` gains an additive `invalidation: Option<InvalidationDto>` field naming a mutation's full blast radius (every board/column/card/sprint id it touched), alongside the existing single `entity_type`/`entity_id`/`kind`. Adds `EntityIdsDto`/`InvalidationDto` as new public exports and `ChangeEventFrame::with_invalidation`.
+
+server: `AppState::broadcast_change` and `AppState::persist_and_broadcast` take a new required `&Invalidation` parameter, the value the mutation's seam returned; `broadcast_unscoped_change` now emits `InvalidationDto::All`. Every write route threads the invalidation from its mutation through to the broadcast, so a subscriber can invalidate exactly what changed instead of falling back to a whole-cache refresh.
+
+### KAN-1542 Session Operations Trait Impl (2026-09-28)
+
+server: Session now implements KanbanOperations and GraphOperations itself, with mutators routed through state::mutate/state::mutate_unit; the server's read helpers take &Session instead of &KanbanContext. No route, request or response changes.
+
+### KAN-1543 Mutation Operations Trait (2026-09-28)
+
+domain: adds a `MutationOperations` trait over the invalidation-carrying mutation surface (the 35 `*_impl` mutators, the eight spec-shaped create/create-or-replace entry points, and `execute`) plus the four `*CreateOutcome` types, moved here from kanban-service.
+service: `KanbanContext` implements `MutationOperations` by pure delegation to its existing inherent methods; re-exports the outcome types so no importer changes. No behaviour change and no call site is re-plumbed onto the trait yet.
+
+### KAN-1544 Undo Operations Trait (2026-09-28)
+
+domain: adds an `UndoOperations` trait (`undo`, `redo`, `can_undo`, `can_redo`, no default bodies, object-safe) over the per-session undo/redo capability.
+service: `KanbanContext`'s undo/redo/can_undo/can_redo move from an inherent impl onto `impl UndoOperations for KanbanContext`; behaviour is unchanged.
+tui: `TuiContext` implements `UndoOperations` directly, now returning the full `Option<Invalidation>` instead of a bool, and still queues a save flush only when something was actually undone or redone.
+mcp: `McpContext` implements `UndoOperations` by delegating to the inner context; `tool_undo`/`tool_redo` are unchanged.
+cli: `CliContext` implements `UndoOperations` by declining undo and redo with `KanbanError::unsupported`, since the CLI opens a fresh context per invocation.
+server: `Session` implements `UndoOperations` by declining undo and redo with `KanbanError::unsupported`, since a session is shared across clients and must not silently inherit the inner context's undo history through `Deref`.
+
+### KAN-1545 Capability Manifest Guards (2026-09-28)
+
+add a capability manifest guard proving every KanbanOperations/GraphOperations/UndoOperations method is wired or explicitly declined in each application
+
+### KAN-1546 Card Archive Restore Routes (2026-09-28)
+
+kanban-server exposes POST /v1/cards/{id}/archive and POST /v1/cards/{id}/restore so HTTP clients can remove a card reversibly instead of only permanently deleting it
+
+### KAN-1547 Board Archive Restore Routes (2026-09-28)
+
+kanban-server exposes POST /v1/boards/{id}/archive, POST /v1/boards/{id}/restore and GET /v1/archived-boards so HTTP clients can remove a board reversibly instead of only permanently deleting it
+
+### KAN-1548 Graph Write Routes (2026-09-28)
+
+dependency-graph write routes (attach/detach children, block/unblock, relate/dissociate) over HTTP, with edge severity/kind now surfaced on the card graph response
+
+### KAN-1549 Sprint Lifecycle Routes (2026-09-28)
+
+kanban-server exposes POST routes to activate, complete, cancel and carry over sprints
+
+### KAN-1550 Batch Op Routes (2026-09-28)
+
+add batch card operation routes for archive, move, assign-sprint and update
+
+### KAN-1551 Card Query Parity (2026-09-28)
+
+server: extend GET /v1/boards/{id}/cards to the full CardListFilter (status, search, sort, hide_assigned, multi-sprint_ids)
+
+### KAN-1552 Import Export Routes (2026-09-28)
+
+server: add board export/import HTTP routes for backup, migration and seeding
+
+### KAN-1553 Backend Agnostic Open Probe (2026-09-28)
+
+kanban_context::open now probes backend liveness instead of the local command log, so opening a context over a remote HttpBackend succeeds instead of failing on batch_count
+
+### KAN-1554 Wire Http Backend Registries (2026-09-28)
+
+register HttpBackendFactory in the CLI, TUI, and MCP backend registries so an http:// or https:// locator opens a remote kanban-server
+
+### KAN-1556 Server Graceful Shutdown (2026-09-28)
+
+kanban-server exits cleanly on SIGTERM and ctrl-c, draining in-flight requests and open SSE streams within a bounded window
+
+### KAN-1557 Server Trace Body Limit Cors Layers (2026-09-28)
+
+kanban-server now logs every request, caps request bodies at 2 MiB, and can serve browser clients from other origins via KANBAN_CORS_ORIGINS
+
+### KAN-1558 Client Identity Core (2026-09-28)
+
+the server stamps mutations and SSE events with the X-Kanban-Client-Id header on board writes and board import
+
+### KAN-1559 Etag If None Match (2026-09-28)
+
+kanban-server single-entity GET routes now send a strong ETag and honour If-None-Match with a bodiless 304 (board, card, column, sprint, and their flat aliases)
+
+### KAN-1560 If Match 412 (2026-09-28)
+
+server,api: add RFC 9110 If-Match optimistic concurrency to the 18 entity PUT/PATCH/DELETE routes (boards, cards, columns, sprints, both board-scoped and flat). A stale (or otherwise non-matching) If-Match on a conditioned write now returns 412 with the new `ErrorCode::PreconditionFailed`, mapped from a new `etag::check_if_match` helper that does RFC 9110 strong comparison with `*` support. The precondition check runs inside the existing per-request write lock, before the mutation, and is skipped entirely when no If-Match header is present. An ETag taken from an entity's GET is accepted by If-Match on that entity's own write routes. CORS under an explicit-origin policy now allows the `If-Match`/`If-None-Match` request headers and exposes `ETag` on responses, so browser clients can participate in the protocol.
+
+### KAN-1561 Server Stateless Requests (2026-09-28)
+
+server: `Session` no longer retains a `kanban_domain::Model` between requests; every read handler builds its own for the duration of its own request. Removes the public `Session::model` field, `AppState::with_reset` and `AppState::reset_model_per_request`. `state::mutate` now returns `KanbanResult<(T, Invalidation)>` and `state::mutate_unit` returns `KanbanResult<Invalidation>`, instead of applying the Invalidation to a retained Model themselves.
+
+### KAN-1562 Mutation Operations Replumb (2026-09-28)
+
+cli: the `mutate`/`mutate_unit` seam closures are now typed against `MutationOperations` instead of `KanbanContext`, so a seam closure can no longer reach a context read or an invalidation-stripping `KanbanOperations` mutator.
+mcp: the `mutate`/`mutate_unit` seam closures are now typed against `MutationOperations` instead of `KanbanContext`, same restriction as above.
+server: the `mutate`/`mutate_unit` seam closures are now typed against `MutationOperations` instead of `KanbanContext`, same restriction as above; the return shape is unchanged.
+tui: `TuiContext` implements `MutationOperations` directly (every method flushes through the existing save-coordinator path) in place of six hand-written inherent forwarders.
+
+Behaviour is unchanged across all four applications.
+
+### KAN-1563 Request Timeout Layer (2026-09-28)
+
+kanban-server now answers 408 Request Timeout for requests that exceed KANBAN_REQUEST_TIMEOUT_SECS (default 30s, 0 to disable); open SSE streams on /v1/events are unaffected.
+
+### KAN-1564 Client Identity Sweep (2026-09-28)
+
+every card, column and sprint write route now honours the client identity header
+
+### KAN-1565 Import Upserts Sprints Before Cards (2026-09-28)
+
+domain: import writes sprints before cards so a sprint-bound card survives import on SQLite
+
+### KAN-1566 Cors Conditional Headers (2026-09-28)
+
+server: the explicit-origin CORS policy's conditional-request headers (if-match, if-none-match, x-kanban-client-id) and its ETag exposure are now pinned by tests, and KANBAN_CORS_ORIGINS documentation lists the headers the policy actually allows and exposes
+
+### KAN-1567 Http Backend Runtime Shutdown Background (2026-09-28)
+
+backend-http: shut the owned runtime down in the background on drop, fixing the exit-101 abort when an http:// locator is dropped from inside an async context
+
+### KAN-1568 Migrate Offers Only Store Capable Backends (2026-09-28)
+
+`kanban migrate` no longer offers `http` as a target backend, since a remote
+backend cannot be migrated to. `kanban-backend` adds `KanbanBackendFactory::is_remote`
+(defaulted to false) and `KanbanBackendRegistry::local_names`; `kanban-backend-http`
+declares itself remote; `kanban-service` adds `StoreManager::local_backend_names`;
+`kanban-cli` builds the migrate command's possible values from it, so clap now
+rejects `http` as an invalid value instead of failing deep inside the backend.
+
+### KAN-1569 Startup Errors Emit The Cli Response Envelope (2026-09-28)
+
+cli: every failure after argument parsing now writes exactly one CliResponse error envelope to stderr, whether it happened during startup (unreachable remote locator, unsupported future on-disk version, missing data file, unregistered backend) or inside a command handler. Argument-parsing errors keep clap's plain-text output and exit code 2.
+
+### KAN-1570 Ambient Aware Block On (2026-09-28)
+
+backend-http: bridge block_on through block_in_place so reads work when a Tokio runtime already drives the calling thread
+
+### KAN-1571 Remote Writes Divert Arms (2026-09-28)
+
+backend,service: RemoteWrites trait returns the server-derived Invalidation, and the nine v1 mutators divert to it when a backend opts in
+
+### KAN-1572 Mutation Response Invalidation (2026-09-28)
+
+api: adds `MutationResponse<T>` and `DeleteResponse` as new public exports. `MutationResponse<T>` flattens an entity DTO with an `invalidation: InvalidationDto` field, so the body still deserializes as the bare entity while also carrying the mutation's blast radius. `DeleteResponse` carries only `invalidation`, for routes that return no entity body.
+
+server: nine v1 write routes now return the mutation's invalidation: `POST /v1/boards`, `PATCH /v1/boards/{id}`, `POST /v1/boards/{board_id}/columns`, `PATCH /v1/columns/{id}`, `POST /v1/columns/{column_id}/cards`, and `PATCH /v1/cards/{id}` return `MutationResponse<T>`; `DELETE /v1/boards/{id}`, `DELETE /v1/columns/{id}`, and `DELETE /v1/cards/{id}` change from `204 No Content` to `200 OK` with a `DeleteResponse` body. Every other write route (nested board-scoped column/card routes, sprint routes, graph routes) is unchanged.
+
+### KAN-1573 Remote Writes Activation (2026-09-28)
+
+backend-http: implement RemoteWrites over the v1 board/column/card routes and turn remote writes on, so a CLI or MCP session pointed at an http:// locator mutates through kanban-server and receives the server's own invalidation
+
+### KAN-1574 Remote Writes Parity (2026-09-28)
+
+backend-http, server: add write-parity test harness proving remote mutations leave the same on-disk graph as local writes on JSON and SQLite
+
+### KAN-1575 Settings Only Storage Persist (2026-09-28)
+
+board sort now writes only the sort preference to config, never session-injected storage keys
+
+### KAN-1576 Card Lookup Route (2026-09-28)
+
+server: adds GET /v1/cards/lookup, resolving a card identifier (KAN-7 or a bare 7) against the locked Session::find_cards_by_identifier surface. Always answers 200 with an unpaginated JSON array of CardResponse; empty for no match or an unparseable identifier, never 404. backend-http: HttpBackend replaces its list_cards_by_prefix_and_number and list_cards_by_number declines with overrides against the new route, so kanban <url> card get KAN-N and the MCP card-by-identifier tools now work against a remote server.
+
+### KAN-1577 Archived Index Rescope (2026-09-28)
+
+service: `archived_card_index` now takes an optional board scope, so a board-scoped card listing reads only that board's archival markers instead of the workspace-global collection. Board-scoped `card list` now works over a remote (HTTP) locator, which previously failed with `Unsupported: list_archived_cards`. Unscoped listings keep the global read and its decline. Local backends are unchanged: the board-scoped read is the same subset the archival stamping already consulted.
+
+### KAN-1578 Client Id Constant And Patch Conv (2026-09-28)
+
+api, server: the client-id header name now lives in kanban-api (re-exported from kanban-server's old path) and Patch gains the reverse FieldUpdate conversion, so the HTTP client and the server share one constant and one bidirectional patch mapping
+
+### KAN-1579 Mutation Transport And Conversions (2026-09-28)
+
+backend-http: add the json mutation transport and outbound domain-to-request conversions
+
+### KAN-1580 Delete Card Touched Entities (2026-09-28)
+
+domain: DeleteCard::touched_entities now names the card it deletes and the dependency graph instead of returning None. Every card create derives its invalidation from its captured DeleteCard inverse, so creates stop broadening to Invalidation::All and name the created card; the prefix-counter bump they also perform is still declared through execute_with_extra. Card deletes are unaffected on the forward path (their invalidation comes from the ImportEntities inverse) but a redo of a delete is now scoped too.
+
+### KAN-1582 Board Scoped Partitions (2026-09-28)
+
+the TUI's card render path reads board-scoped tiers instead of the flat workspace-wide ones
+
+### KAN-1583 Handler Scoped Reads (2026-09-28)
+
+TUI handler operations read board-scoped tiers instead of the flat card/column/sprint collections
+
+### KAN-1584 Mcp Scope Indexed Resolution (2026-09-28)
+
+MCP/CLI batch card resolution uses the indexed card lookup instead of loading the whole card list, fixing it over a remote backend and unifying archived-board semantics with single-card resolution
+
+### KAN-1585 Viewscope Flat Arm Drop (2026-09-28)
+
+tui: ViewScope stops requesting the flat column/card/sprint tiers; the render path and handlers already read the board-scoped ones. Consequence: CardDetail's parents/children panel no longer resolves a spawns relative on a different board unless its body was already fetched, since nothing populates the flat fallback any more.
+
+### KAN-1586 Retire Flat Fetch Tiers (2026-09-28)
+
+retire the flat column/card/sprint fetch-round tiers, leaving per-parent-scope and per-id fetches as the only expressible reads
+
+### KAN-1587 Sse Remote Freshness (2026-09-28)
+
+TUI sessions on a remote server now stay fresh via SSE, receiving other clients' changes live instead of only on manual refresh
+
+### KAN-1588 Graph Route (2026-09-28)
+
+server adds GET /v1/graph returning the whole workspace dependency graph including archived edges; backend-http fetches it instead of declining, and a 404 from an older server is reported as a loud unsupported error rather than an empty graph
+
+### KAN-1589 Delete Flat Model Collections (2026-09-28)
+
+domain,backend-http: delete the flat column/card/sprint Model collections, leaving scoped and per-id fetches as the only source of truth. User-visible: a CardDetail relation card on another board now has its body fetched (previously it silently vanished from the parents/children panel), and four HttpBackend DataStore methods now decline under their own names instead of a sibling's.
+
+### KAN-1590 Backend Swap Rewires Freshness (2026-09-28)
+
+Switching storage location mid-session, or adopting a new storage file, now re-points live change detection at the new location instead of leaving it on the old one, so a switch to a remote server starts receiving other clients' changes without a restart.
+
+### KAN-1591 Load State Lifecycle Defects (2026-09-28)
+
+fix six LoadState lifecycle defects: relation accessors, archiving animation resolution, save-completion busy-spin guard, archived-body precedence, file watcher restart, and board-detail navigation
+
+### KAN-1592 Ui Honesty Defects (2026-09-28)
+
+fix a stray keystroke leak, a false last-column warning, and a sprint-tier marker that hid load failures
+
+### KAN-1593 Pin Remote Seams (2026-09-28)
+
+Add tests pinning six already-shipped remote path behaviours: SSE CRLF tolerance and multi-data-line joining, graph tier invalidate and refetch over HttpBackend, an MCP graph-backed tool over an http locator, the startup scope's flat-tier avoidance over HttpBackend, and non-None optionals surviving the create wire in write parity. No production behaviour changes.
+
+### KAN-1594 Local Coverage Gaps (2026-09-28)
+
+close eight local test-coverage gaps: rollback tiers, receipt guard, batch ambiguity, cycle-conflicting transfer, archived-board MCP resolution, and discriminating assertion fixes
+
+### KAN-1595 Conditional Requests Docs And Lf (2026-09-28)
+
+server: document the ETag / If-None-Match / If-Match protocol and the real /v1/graph empty body; repo: pin LF line endings; tui: rebuild a tautological relationship-resolution test on an independent expectation
+
+### KAN-1596 Delete Dead Scan And Holes (2026-09-28)
+
+propagate the JSON backend's swallowed load error through flush, delete the dead ended-sprint scan and the write-only SaveCoordinator file watcher, reuse the resolver's board list in MCP sprint carry-over, cap the global sprint and column NotFound enumerations, and narrow Model::set_cards_of_column to crate-private
+
+### KAN-1597 Ended Sprint Count Tasks Panel Title (2026-09-28)
+
+view: adds ended_sprint_count(...) -> PanelCount and a TasksPanelTitle::ended_sprints field, so a title can say how many of a board's sprints ran past their end date without closing out, or say it does not know. build_tasks_panel_title gains a matching parameter. This is a minor bump: it adds a public field to a non-exhaustive-free struct and a parameter to a public fn, breaking every out-of-tree caller.
+
+tui: the main-view tasks panel title now reports the active board's ended sprints, styled with the new theme::ended_marker() that ui/board_detail.rs's " Ended" marker also consumes. PanelConfig carries a ratatui Line instead of a &str so the segment can be styled, and format_tasks_panel_title keeps its String signature as that Line's Display projection.
+
+### KAN-1601 List Archived Boards Over Http (2026-09-28)
+
+backend-http: implement `list_archived_boards` over HTTP. The server already exposed `GET /v1/archived-boards`, but `HttpBackend` declined the read unconditionally; it now pages through that route with the existing `get_json_list` helper and converts each marker with a new `archived_board_from_response`. Unscoped `card list` over HTTP now progresses past the archived-board read instead of failing on it.
+
+### KAN-1602 Whole Store Reads Over Http (2026-09-28)
+
+backend-http,tui: serve every whole-store list read over HTTP by fanning out over the per-board routes that already work. `list_all_cards`, `list_all_columns`, `list_all_sprints` and `list_archived_cards` no longer decline as `Unsupported`, so unscoped listings (`kanban card list` with no `--board`, `tool_list_cards` with no board) work against a remote `kanban-server` for the first time. The fan-out unions live and archived boards, since archiving a board only records a marker and its columns and cards stay in the flat collections; ordering matches the in-memory backend. No server or domain changes. The TUI sprint-log migration now recognises a declined read with `is_unsupported()` instead of matching the operation name as a literal string, so further decline-chain churn cannot resurface the startup error entry.
+
+### KAN-1604 Stamp Archived At (2026-09-28)
+
+server,backend-http: stamp archived_at on the single-card routes and serve get_archived_card over HTTP from them
+
+### KAN-1605 Restore Neighbours (2026-09-28)
+
+Bound RestoreCard's archived-neighbour check to the card's own neighbours instead of scanning every archived card in the store.
+
+### KAN-1606 Column Count Route (2026-09-28)
+
+add a column-scoped card count route and implement it on the HTTP backend
+
+### KAN-1607 Get Column Requires Board (2026-09-28)
+
+mcp: breaking change to the MCP contract. `tool_get_column`, `tool_update_column`, `tool_delete_column`, `tool_reorder_column`, and the board-less column-name arm of `tool_list_cards` now require a `board` when `column` is a name; resolution by column UUID is unaffected. Columns belong to a board and column names are not unique across boards, so a board-less name lookup was ambiguous by construction and failed outright against a remote backend. `resolve_column_global` is removed; every name lookup now routes through the existing board-scoped resolver, which already works remotely.
+
+### KAN-1608 Branch Name Scoped Sprints (2026-09-28)
+
+Resolve branch-name and git-checkout sprints from the card's board instead of the whole sprint store
+
+### KAN-1609 Cli Column Requires Board (2026-09-28)
+
+cli,domain: breaking change to the CLI contract. `kanban column get`, `kanban column update`, `kanban column delete`, `kanban column reorder`, and the board-less column-name arm of `kanban card list` now require a `--board` when the column is given by a name; resolution by column UUID is unaffected. Columns belong to a board and column names are not unique across boards, so a board-less name lookup was ambiguous by construction and failed outright against a remote backend. `KanbanOperations::resolve_column_id_global` is removed; every name lookup now routes through the existing board-scoped `resolve_column_id`, which already works remotely. Removing a public trait's default method is breaking for out-of-tree implementors, hence `minor` under the pre-1.0 rule.
+
+### KAN-1611 Sprint Requires Board (2026-09-28)
+
+cli,mcp,domain: breaking change to the CLI and MCP contracts. `kanban sprint get/update/activate/complete/cancel/delete/carry-over`, `tool_get_sprint`, `tool_update_sprint`, `tool_activate_sprint`, `tool_complete_sprint`, `tool_cancel_sprint`, `tool_delete_sprint`, `tool_carry_over_sprint_cards`, and the board-less sprint arm of `kanban card list` / `tool_list_cards` now require a board when the sprint is given by name or number; resolution by sprint UUID is unaffected. A sprint's name is an index into its board's name pool and sprint numbers can collide across boards, so a board-less lookup was undefined by construction and failed outright against a remote backend (`list_all_sprints` is deliberately declined there). `KanbanOperations::resolve_sprint_id_global`, `resolve_sprint_global`, and `resolve_sprint_global_with_boards` are removed; every name-or-number lookup now routes through the existing board-scoped resolver, which already works remotely for sprint numbers (sprint-name resolution over the HTTP backend remains blocked by a separate, pre-existing gap in `kanban-backend-http`'s response-to-domain conversions, which this card does not touch).
+
+### KAN-1612 Stop Claiming Nothing To Undo After A Write T (2026-09-28)
+
+Undo/redo now decline with an error over the HTTP backend instead of falsely reporting nothing to undo
+
+### KAN-1613 Split Remotewrites Into Per Family Traits And (2026-09-28)
+
+backend,backend-http: split RemoteWrites into per-family traits (RemoteBoardWrites, RemoteCardWrites, RemoteBatchWrites, RemoteSprintWrites, RemoteGraphWrites) as independently optional seams on KanbanBackend. The existing RemoteWrites trait is unchanged and HttpBackend still returns Some only for the board and card families it already covers, so this is a no-behavior-change refactor.
+
+### KAN-1614 Divert Board Archive And Restore To The Serv (2026-09-28)
+
+service,backend-http,server: divert board archive and restore to the remote when a board is backed by a server. `archive_board_impl`/`restore_board_impl` check `remote_board_writes()` before any local read and, when present, call it instead of mutating local state directly. `HttpBackend` implements `RemoteBoardWrites::archive_board`/`restore_board` over `POST /v1/boards/{id}/archive` and `/restore`, and the two server route handlers now return `MutationResponse<BoardResponse>` so the invalidation travels on the wire (additive, since `MutationResponse` flattens `BoardResponse`).
+
+### KAN-1615 Divert Card Archive And Restore To The Server (2026-09-28)
+
+service,backend-http,server: divert card archive and restore to the remote when a card is backed by a server. Card archive/restore now check remote_card_writes() before any local read, and return the server invalidation verbatim over HttpBackend. A backend that carries remote_writes but no card-write support now declines with a per-op message (archive_card/restore_card) instead of the blanket create/update/delete fence text. The archive/restore server routes now wrap their CardResponse in MutationResponse so the invalidation travels over the wire, matching the other card mutation routes. Breaking: RemoteCardWrites gains two required methods, so any external impl RemoteCardWrites for X {} stops compiling.
+
+### KAN-1624 Carry Sprint Name Pool Over Http (2026-09-28)
+
+api,backend-http,cli,mcp,server: carry a board's sprint-name pool (`sprint_names`, `sprint_name_used_count`, `next_sprint_number`) on `BoardResponse`, so a client converting it into a domain `Board` can resolve a sprint's name. Fixes every sprint rendering unnamed over the HTTP backend: a `Sprint` stores its name as an index into the board's pool, and `board_from_response` used to drop the pool while `sprint_from_response` discarded the resolved `name` the server already sends, so `sprint_from_response` now re-derives `Sprint::name_index` from the owning board's pool instead of always leaving it `None`. Sprint numbers are NOT allocated from `next_sprint_number` (allocation reads the `prefixes` row's `sprint_counter`, and every sprint write over HTTP is declined); the field is carried for fidelity only. `BoardResponse` is also the CLI and MCP board projection, so `kanban board get/list/import` and the MCP board tools now emit these three fields; the KAN-769 wire guard is narrowed to match, keeping `card_counter` and `sprint_counters` hidden. The three fields deserialize with `serde(default)` so a newer client degrades to unnamed sprints against an older server rather than failing every board read. Adding fields to the public `BoardResponse` struct breaks external struct-literal construction, hence `minor` under the pre-1.0 rule.
+
+### KAN-1626 Move Adopts Column Status (2026-09-28)
+
+Moving a card to another column now adopts that column's default_status regardless of the card's current status, instead of only when it is Todo. A Blocked card is exempt and keeps its status on moves between non-completion columns.
+
+### KAN-1630 Mcp Honor Kanban File Env (2026-09-28)
+
+mcp: `kanban-mcp` now honors the `KANBAN_FILE` environment variable when no data-file argument is given, matching `kanban-cli` and `kanban-server`. Its startup errors now also name the data file they failed to open. If you already export `KANBAN_FILE` globally and start `kanban-mcp` with no argument, it will switch from the config/`boards.json` fallback to that env var's target.
+
+### KAN-702 Http Locator Routing (2026-09-28)
+
+Route http:// and https:// locators to a new HttpBackendFactory instead of silently misrouting them to the JSON or SQLite backend factories
+
+
 ## [0.9.0] - 2026-08-28 ([#557](https://github.com/kanban-rs/kanban/pull/557))
 
 ### Other Changes (2026-08-28)
