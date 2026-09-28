@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Response body for sprint reads. Hides the internal allocation state
-/// (`name_index`); instead it exposes the resolved sprint `name`. `sprint_number`
-/// IS exposed (it is the human-facing read-only identifier, unlike a board's
-/// hidden counters). Lifecycle (`status`/dates) is exposed read-only;
+/// (`name_index`); instead it exposes the resolved sprint `name`, whereas
+/// `BoardResponse` exposes the raw `sprint_names` pool that `name_index`
+/// points into. `sprint_number` IS exposed (it is the human-facing
+/// read-only identifier). Lifecycle (`status`/dates) is exposed read-only;
 /// transitions go through dedicated activate/complete/cancel endpoints.
 /// `Deserialize` is derived intentionally (test round-trips / client use); the
 /// server only serializes it.
@@ -58,6 +59,12 @@ impl SprintResponse {
             updated_at: *updated_at,
         }
     }
+}
+
+/// Response body for `POST /v1/boards/:board_id/sprints/:id/carry-over`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CarryOverResponse {
+    pub moved: usize,
 }
 
 #[cfg(test)]
@@ -125,5 +132,14 @@ mod tests {
         let sprint = Sprint::new(Uuid::new_v4(), 2, None, None::<String>);
         let resp = SprintResponse::new(&sprint, None);
         assert_eq!(resp.name, None);
+    }
+
+    #[test]
+    fn test_carry_over_response_round_trips_moved_field() {
+        let resp = CarryOverResponse { moved: 3 };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json, serde_json::json!({"moved": 3}));
+        let back: CarryOverResponse = serde_json::from_value(json).unwrap();
+        assert_eq!(back, resp);
     }
 }
