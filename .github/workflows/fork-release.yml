@@ -28,6 +28,9 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-14
             zig: false
+          - target: x86_64-apple-darwin
+            os: macos-14
+            zig: false
     steps:
       - uses: actions/checkout@v4
 
