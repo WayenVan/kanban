@@ -63,4 +63,10 @@ impl KanbanContext {
     pub async fn save(&self) -> KanbanResult<()> {
         self.backend.flush().await
     }
+
+    /// Like [`save`][Self::save], but overwrites changes another writer made
+    /// to storage since the last load or save.
+    pub async fn force_save(&self) -> KanbanResult<()> {
+        self.backend.force_flush().await
+    }
 }

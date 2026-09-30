@@ -18,6 +18,7 @@ pub struct PersistenceState {
     pub save_worker_handle: Option<tokio::task::JoinHandle<()>>,
     pub save_completion_rx: Option<tokio::sync::mpsc::UnboundedReceiver<()>>,
     pub save_error_rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
+    pub save_conflict_rx: Option<tokio::sync::mpsc::UnboundedReceiver<()>>,
     pub remote_change_rx:
         Option<tokio::sync::mpsc::Receiver<kanban_service::api::ChangeEventFrame>>,
     /// Written only by `App::rewire_freshness`; mirrors which of
@@ -37,6 +38,7 @@ impl PersistenceState {
             save_worker_handle: None,
             save_completion_rx,
             save_error_rx: None,
+            save_conflict_rx: None,
             remote_change_rx: None,
             freshness: FreshnessSource::default(),
         }

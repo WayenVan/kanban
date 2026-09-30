@@ -157,6 +157,8 @@ impl App {
         let save_completion_tx = self.ctx.save_coordinator.save_completion_tx().cloned();
         let (save_error_tx, save_error_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         self.persistence.save_error_rx = Some(save_error_rx);
+        let (save_conflict_tx, save_conflict_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+        self.persistence.save_conflict_rx = Some(save_conflict_rx);
 
         tracing::info!("Spawning save worker");
         let handle = tokio::spawn(async move {
@@ -197,10 +199,8 @@ impl App {
                         true
                     }
                     Err(kanban_domain::KanbanError::ConflictDetected { path, .. }) => {
-                        tracing::warn!(
-                            "Save worker detected conflict at {}: external write wins",
-                            path
-                        );
+                        tracing::warn!("Save worker detected conflict at {}", path);
+                        let _ = save_conflict_tx.send(());
                         false
                     }
                     Err(e) => {
@@ -211,10 +211,8 @@ impl App {
                 };
 
                 // Only signal completion when the flush actually succeeded.
-                // On conflict or error the save remains outstanding: pending_saves
-                // stays > 0 so the Layer-2 guard keeps protecting the TUI, and
-                // the file-watcher event from the external write will trigger the
-                // ExternalChangeDetected dialog which queues a fresh flush.
+                // A conflict is released by the App via the conflict channel;
+                // on other errors the save remains outstanding.
                 if save_succeeded {
                     if let Some(ref tx) = save_completion_tx {
                         if let Err(e) = tx.send(()) {

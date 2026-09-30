@@ -131,14 +131,10 @@ impl App {
                                 match self.pending_key {
                                     Some('o') => {
                                         self.pending_key = None;
-                                        self.needs_redraw = true;
                                         if let Some(ref watcher) = self.persistence.file_watcher {
                                             watcher.suppress_next_event();
                                         }
-                                        self.ctx.clear_conflict();
-                                        if let Err(e) = self.ctx.save().await {
-                                            tracing::error!("Failed to force overwrite: {}", e);
-                                        }
+                                        self.force_overwrite_local().await;
                                     }
                                     Some('t') => {
                                         self.pending_key = None;
@@ -250,6 +246,15 @@ impl App {
                         tracing::warn!("Save error received from worker: {}", error_msg);
                         self.set_save_error(error_msg);
                         self.needs_redraw = true;
+                    }
+                    Some(()) = async {
+                        if let Some(ref mut rx) = &mut self.persistence.save_conflict_rx {
+                            rx.recv().await
+                        } else {
+                            std::future::pending().await
+                        }
+                    } => {
+                        self.handle_save_conflict();
                     }
                     Some(_change_event) = async {
                         if let Some(ref mut rx) = &mut self.persistence.file_change_rx {

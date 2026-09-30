@@ -431,6 +431,14 @@ impl KanbanBackend for JsonDataStore {
         result
     }
 
+    async fn force_flush(&self) -> KanbanResult<()> {
+        self.file_store
+            .forget_known_metadata()
+            .map_err(KanbanError::from)?;
+        self.mark_dirty();
+        self.flush().await
+    }
+
     async fn reload(&self) -> KanbanResult<()> {
         {
             let mut guard = self
@@ -749,14 +757,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_needs_save_worker_returns_true() {
-        let dir = tempdir().unwrap();
-        let jds = make_store(&dir.path().join("t.json"));
-        assert!(jds.needs_save_worker());
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    #[tokio::test(flavor = "multi_thread")]
     async fn test_force_flush_overwrites_external_change_with_local_state() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("force.json");
@@ -791,6 +791,14 @@ mod tests {
         assert!(!local.needs_flush());
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_needs_save_worker_returns_true() {
+        let dir = tempdir().unwrap();
+        let jds = make_store(&dir.path().join("t.json"));
+        assert!(jds.needs_save_worker());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_apply_snapshot_sets_dirty_flag() {
         let dir = tempdir().unwrap();
         let jds = make_store(&dir.path().join("t.json"));

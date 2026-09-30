@@ -507,7 +507,7 @@ impl PersistenceStore for JsonFileStore {
             // Compare with last known metadata
             let guard = self.lock_metadata()?;
             if let Some(last_known) = *guard {
-                if last_known != current_metadata {
+                if !last_known.same_content(&current_metadata) {
                     return Err(PersistenceError::ConflictDetected {
                         path: self.path.to_string_lossy().to_string(),
                         source: None,
@@ -550,6 +550,11 @@ impl PersistenceStore for JsonFileStore {
         );
 
         Ok(snapshot.metadata)
+    }
+
+    fn forget_known_metadata(&self) -> PersistenceResult<()> {
+        *self.lock_metadata()? = None;
+        Ok(())
     }
 
     async fn load(&self) -> PersistenceResult<(StoreSnapshot, PersistenceMetadata)> {
@@ -715,11 +720,6 @@ mod tests {
         assert_eq!(loaded_data, data);
     }
 
-    #[tokio::test]
-    async fn test_exists() {
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("nonexistent.json");
-        let store = JsonFileStore::new(&file_path);
     fn envelope_snapshot(store: &JsonFileStore) -> StoreSnapshot {
         StoreSnapshot {
             data: serde_json::to_vec(&json!({ "boards": [] })).unwrap(),
@@ -777,6 +777,11 @@ mod tests {
             .expect("the forced write becomes the new baseline for later saves");
     }
 
+    #[tokio::test]
+    async fn test_exists() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("nonexistent.json");
+        let store = JsonFileStore::new(&file_path);
 
         assert!(!store.exists().await);
 

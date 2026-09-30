@@ -40,6 +40,12 @@ pub trait KanbanBackend: DataStore + CommandStore + Send + Sync {
         Ok(())
     }
 
+    /// Persist cached writes even if storage changed underneath since the
+    /// last load or save, overwriting the external change.
+    async fn force_flush(&self) -> KanbanResult<()> {
+        self.flush().await
+    }
+
     /// Discard cached state so the next read re-fetches from storage.
     async fn reload(&self) -> KanbanResult<()> {
         Ok(())

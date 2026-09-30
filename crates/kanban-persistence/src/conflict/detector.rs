@@ -41,6 +41,12 @@ impl FileMetadata {
         })
     }
 
+    /// Compares size and content hash only. Sync clients and `touch` bump
+    /// the mtime without changing a byte, which must not count as a change.
+    pub fn same_content(&self, other: &Self) -> bool {
+        self.size == other.size && self.content_hash == other.content_hash
+    }
+
     /// Check if file has changed since this metadata was captured
     pub fn has_changed(&self, path: &Path) -> std::io::Result<bool> {
         let current = Self::from_file(path)?;

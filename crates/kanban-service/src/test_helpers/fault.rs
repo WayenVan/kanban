@@ -410,6 +410,9 @@ impl KanbanBackend for FaultInjectingBackend {
     async fn flush(&self) -> KanbanResult<()> {
         self.inner.flush().await
     }
+    async fn force_flush(&self) -> KanbanResult<()> {
+        self.inner.force_flush().await
+    }
     async fn reload(&self) -> KanbanResult<()> {
         if self.failing.lock().unwrap().contains("reload") {
             return Err(KanbanError::Database("injected fault: reload".into()));

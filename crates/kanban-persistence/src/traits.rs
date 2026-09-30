@@ -101,6 +101,12 @@ pub trait PersistenceStore: Send + Sync {
     /// The default is a no-op; backends with long-lived handles (e.g.
     /// `SqliteStore`) override this.
     async fn close(&self) {}
+
+    /// Drop the conflict-detection baseline so the next `save` overwrites
+    /// whatever is on disk. No-op for stores without conflict detection.
+    fn forget_known_metadata(&self) -> PersistenceResult<()> {
+        Ok(())
+    }
 }
 
 /// Trait for detecting changes to the storage file

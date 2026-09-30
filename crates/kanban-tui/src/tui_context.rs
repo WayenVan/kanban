@@ -110,6 +110,10 @@ impl TuiContext {
         self.inner.clear_conflict()
     }
 
+    pub fn set_conflict(&mut self) {
+        self.inner.set_conflict()
+    }
+
     pub fn has_conflict(&self) -> bool {
         self.inner.has_conflict()
     }
@@ -124,6 +128,10 @@ impl TuiContext {
 
     pub async fn save(&self) -> KanbanResult<()> {
         self.inner.save().await
+    }
+
+    pub async fn force_save(&self) -> KanbanResult<()> {
+        self.inner.force_save().await
     }
 
     pub async fn reload(&mut self) -> KanbanResult<()> {
