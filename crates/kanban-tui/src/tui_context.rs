@@ -51,9 +51,7 @@ impl TuiContext {
         commands: Vec<Command>,
     ) -> KanbanResult<kanban_domain::Invalidation> {
         let inv = self.inner.execute(commands)?;
-        if self.save_coordinator.has_save_channel() {
-            self.save_coordinator.queue_flush();
-        }
+        self.after_write();
         Ok(inv)
     }
 
@@ -70,9 +68,7 @@ impl TuiContext {
         build: impl FnOnce(&dyn kanban_domain::DataStore) -> KanbanResult<Vec<Command>>,
     ) -> KanbanResult<kanban_domain::Invalidation> {
         let inv = self.inner.execute_with_extra(extra, build)?;
-        if self.save_coordinator.has_save_channel() {
-            self.save_coordinator.queue_flush();
-        }
+        self.after_write();
         Ok(inv)
     }
 
@@ -88,8 +84,8 @@ impl TuiContext {
 
     pub fn migrate_sprint_logs(&mut self) -> KanbanResult<usize> {
         let (result, _invalidation) = self.inner.migrate_sprint_logs()?;
-        if result > 0 && self.save_coordinator.has_save_channel() {
-            self.save_coordinator.queue_flush();
+        if result > 0 {
+            self.after_write();
         }
         Ok(result)
     }
@@ -185,10 +181,22 @@ impl TuiContext {
     }
 
     fn with_flush<T>(&mut self, result: KanbanResult<T>) -> KanbanResult<T> {
-        if result.is_ok() && self.save_coordinator.has_save_channel() {
-            self.save_coordinator.queue_flush();
+        if result.is_ok() {
+            self.after_write();
         }
         result
+    }
+
+    /// Backends without a save worker (SQLite, HTTP) commit each mutation
+    /// synchronously, so nothing is left unsaved. Leaving `dirty` set would
+    /// make the backend's own later WAL checkpoint look like an external
+    /// change that conflicts with local edits.
+    fn after_write(&mut self) {
+        if self.save_coordinator.has_save_channel() {
+            self.save_coordinator.queue_flush();
+        } else {
+            self.inner.mark_clean();
+        }
     }
 }
 
@@ -516,16 +524,16 @@ impl MutationOperations for TuiContext {
 impl UndoOperations for TuiContext {
     fn undo(&mut self) -> KanbanResult<Option<Invalidation>> {
         let inv = self.inner.undo()?;
-        if inv.is_some() && self.save_coordinator.has_save_channel() {
-            self.save_coordinator.queue_flush();
+        if inv.is_some() {
+            self.after_write();
         }
         Ok(inv)
     }
 
     fn redo(&mut self) -> KanbanResult<Option<Invalidation>> {
         let inv = self.inner.redo()?;
-        if inv.is_some() && self.save_coordinator.has_save_channel() {
-            self.save_coordinator.queue_flush();
+        if inv.is_some() {
+            self.after_write();
         }
         Ok(inv)
     }
