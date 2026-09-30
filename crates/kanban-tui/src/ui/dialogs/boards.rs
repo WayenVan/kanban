@@ -238,42 +238,30 @@ pub(crate) fn render_set_branch_prefix_popup(app: &App, frame: &mut Frame) {
 
 pub(crate) fn render_choose_storage_file_popup(app: &App, frame: &mut Frame) {
     use crate::app::StorageBackendChoice;
-    use crate::components::centered_rect_abs;
-    use ratatui::widgets::{Block, Borders, Clear};
 
-    // Sum of inner row constraints (3 + 1 + 1 + 3 + 2 + 1 + 1 + 1 + 1) = 14,
-    // plus 2*2 vertical margin + 2 borders = 20 rows minimum. Below that
-    // the popup just fills the available height (centered_rect_abs clamps).
-    const MIN_HEIGHT: u16 = 20;
-    const PERCENT_X: u16 = 70;
-
-    let area = centered_rect_abs(PERCENT_X, MIN_HEIGHT, frame.area());
-    frame.render_widget(Clear, area);
-
-    let block = Block::default()
-        .title("No board file configured")
-        .borders(Borders::ALL)
-        .style(popup_bg());
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([
-            Constraint::Length(3), // description
-            Constraint::Length(1), // spacer
-            Constraint::Length(1), // "Filename:" label
-            Constraint::Length(3), // input box
-            Constraint::Length(2), // resolved-path preview (wraps if long)
-            Constraint::Length(1), // spacer
-            Constraint::Length(1), // format radio
-            Constraint::Length(1), // spacer
-            Constraint::Length(1), // hint
-            Constraint::Min(0),
-        ])
-        .split(inner);
+    let slots = [
+        Slot::line(0),
+        Slot::flexible(3, 1, 6), // description
+        Slot::line(1),
+        Slot::line(5),           // "Filename:" label
+        Slot::line(9),           // input
+        Slot::flexible(2, 1, 4), // resolved-path preview (wraps if long)
+        Slot::line(2),
+        Slot::line(7), // format radio
+        Slot::line(1),
+        Slot::line(3), // hint
+        Slot::line(0),
+    ];
+    let area = Popup::new("No board file configured")
+        .width_percent(70)
+        .content_height(slots_height(&slots))
+        .render(frame);
+    let rows = fit_rows(area, &slots);
+    let draw = |frame: &mut Frame, widget: Paragraph, row: Option<ratatui::layout::Rect>| {
+        if let Some(row) = row {
+            frame.render_widget(widget, row);
+        }
+    };
 
     let bold_normal = normal_text().add_modifier(Modifier::BOLD);
 
@@ -292,19 +280,23 @@ pub(crate) fn render_choose_storage_file_popup(app: &App, frame: &mut Frame) {
             Span::styled("'.", normal_text()),
         ]),
     ];
-    frame.render_widget(Paragraph::new(description), chunks[0]);
+    draw(
+        frame,
+        Paragraph::new(description).wrap(ratatui::widgets::Wrap { trim: false }),
+        rows[1],
+    );
 
-    let label = Paragraph::new("Filename:").style(highlight_text());
-    frame.render_widget(label, chunks[2]);
-
-    let input = Paragraph::new(app.input.as_str())
-        .style(normal_text())
-        .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(input, chunks[3]);
-
-    let cursor_x = chunks[3].x + app.input.cursor_display_col() as u16 + 1;
-    let cursor_y = chunks[3].y + 1;
-    frame.set_cursor_position((cursor_x, cursor_y));
+    draw(frame, field_label("Filename:", true), rows[3]);
+    if let Some(row) = rows[4] {
+        render_input_field(
+            frame,
+            row,
+            app.input.as_str(),
+            app.input.cursor_display_col(),
+            true,
+            Style::default(),
+        );
+    }
 
     let resolved = display_dialog_path(app.input.as_str());
     let preview = Paragraph::new(Line::from(vec![
@@ -312,7 +304,7 @@ pub(crate) fn render_choose_storage_file_popup(app: &App, frame: &mut Frame) {
         Span::styled(resolved, normal_text()),
     ]))
     .wrap(ratatui::widgets::Wrap { trim: false });
-    frame.render_widget(preview, chunks[4]);
+    draw(frame, preview, rows[5]);
 
     let radio = Line::from(vec![
         Span::styled("Format: ", highlight_text()),
@@ -331,7 +323,7 @@ pub(crate) fn render_choose_storage_file_popup(app: &App, frame: &mut Frame) {
         Span::styled("Tab", bold_normal),
         Span::styled(" to toggle)", normal_text()),
     ]);
-    frame.render_widget(Paragraph::new(radio), chunks[6]);
+    draw(frame, Paragraph::new(radio), rows[7]);
 
     let hint = Line::from(vec![
         Span::styled("Enter", bold_normal),
@@ -339,7 +331,7 @@ pub(crate) fn render_choose_storage_file_popup(app: &App, frame: &mut Frame) {
         Span::styled("Esc", bold_normal),
         Span::styled(" — continue in memory", normal_text()),
     ]);
-    frame.render_widget(Paragraph::new(hint), chunks[8]);
+    draw(frame, Paragraph::new(hint), rows[9]);
 }
 
 fn radio_marker(

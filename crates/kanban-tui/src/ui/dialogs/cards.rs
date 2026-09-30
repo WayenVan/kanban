@@ -35,115 +35,84 @@ pub(crate) fn render_create_card_popup(app: &App, frame: &mut Frame) {
         return;
     }
 
-    let border_and_margin = 6;
-    let dialog_height = if sprint_visible {
-        (frame.area().height * 60 / 100).max(18)
-    } else {
-        1 + 3 + 1 + 3 + border_and_margin
-    };
-    let area = crate::components::centered_rect_abs(60, dialog_height, frame.area());
-    frame.render_widget(Clear, area);
-
-    let block = Block::default()
-        .title("Create New Task")
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::Black));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let mut constraints = vec![
-        Constraint::Length(1),
-        Constraint::Length(3),
-        Constraint::Length(1),
-        Constraint::Length(3),
+    const PICKER_ROWS: u16 = 12;
+    let mut slots = vec![
+        Slot::line(1),
+        Slot::line(5),
+        Slot::line(9),
+        Slot::line(2),
+        Slot::line(4),
+        Slot::line(8),
     ];
     if sprint_visible {
-        constraints.push(Constraint::Length(1));
-        constraints.push(Constraint::Min(0));
+        slots.extend([
+            Slot::line(2),
+            Slot::line(3),
+            Slot::flexible(PICKER_ROWS, 3, 7),
+        ]);
     }
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints(constraints)
-        .split(inner);
+    slots.push(Slot::line(0));
+
+    let area = Popup::new("Create New Task")
+        .border_style(crate::theme::focused_border())
+        .content_height(slots_height(&slots))
+        .render(frame);
+    let rows = fit_rows(area, &slots);
 
     let title_focused = app.dialog_input.create_card_focus_is_title();
     let column_focused = app.dialog_input.create_card_focus_is_column();
     let sprint_focused = app.dialog_input.create_card_focus_is_sprint();
-    let unfocused_border = Style::default().fg(Color::DarkGray);
 
-    frame.render_widget(
-        Paragraph::new("Task Title:").style(Style::default().fg(Color::Yellow)),
-        chunks[0],
-    );
-
-    let input = Paragraph::new(app.input.as_str())
-        .style(crate::theme::normal_text())
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(if title_focused {
-                    crate::theme::focused_border()
-                } else {
-                    unfocused_border
-                }),
+    if let Some(row) = rows[1] {
+        frame.render_widget(field_label("Task Title:", title_focused), row);
+    }
+    if let Some(row) = rows[2] {
+        render_input_field(
+            frame,
+            row,
+            app.input.as_str(),
+            app.input.cursor_display_col(),
+            title_focused,
+            Style::default(),
         );
-    frame.render_widget(input, chunks[1]);
-    if title_focused {
-        let cursor_x = chunks[1].x + app.input.cursor_display_col() as u16 + 1;
-        let cursor_y = chunks[1].y + 1;
-        frame.set_cursor_position((cursor_x, cursor_y));
     }
 
-    frame.render_widget(
-        Paragraph::new("Column:").style(Style::default().fg(Color::Yellow)),
-        chunks[2],
-    );
-
-    let column_text_style = if column_editable {
-        crate::theme::normal_text()
-    } else {
-        crate::theme::label_text()
-    };
-    let column_input = Paragraph::new(app.dialog_input.create_card_column_input.as_str())
-        .style(column_text_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(if column_focused {
-                    crate::theme::focused_border()
-                } else {
-                    unfocused_border
-                }),
+    if let Some(row) = rows[4] {
+        frame.render_widget(field_label("Column:", column_focused), row);
+    }
+    if let Some(row) = rows[5] {
+        let column_text_style = if column_editable {
+            crate::theme::normal_text()
+        } else {
+            crate::theme::label_text()
+        };
+        let column_input = &app.dialog_input.create_card_column_input;
+        render_input_field(
+            frame,
+            row,
+            column_input.as_str(),
+            column_input.cursor_display_col(),
+            column_focused,
+            column_text_style,
         );
-    frame.render_widget(column_input, chunks[3]);
-    if column_focused {
-        let cursor_x = chunks[3].x
-            + app
-                .dialog_input
-                .create_card_column_input
-                .cursor_display_col() as u16
-            + 1;
-        let cursor_y = chunks[3].y + 1;
-        frame.set_cursor_position((cursor_x, cursor_y));
     }
 
-    if sprint_visible {
-        frame.render_widget(
-            Paragraph::new("Sprint:").style(Style::default().fg(Color::Yellow)),
-            chunks[4],
-        );
-
+    if !sprint_visible {
+        return;
+    }
+    if let Some(row) = rows[7] {
+        frame.render_widget(field_label("Sprint:", sprint_focused), row);
+    }
+    if let Some(picker_area) = rows[8] {
         let picker_block = Block::default()
             .borders(Borders::ALL)
             .border_style(if sprint_focused {
                 crate::theme::focused_border()
             } else {
-                unfocused_border
+                crate::theme::unfocused_border()
             });
-        let picker_inner = picker_block.inner(chunks[5]);
-        frame.render_widget(picker_block, chunks[5]);
+        let picker_inner = picker_block.inner(picker_area);
+        frame.render_widget(picker_block, picker_area);
         match app.model.board_sprints_state(board.id) {
             LoadState::Loaded(sprints) => {
                 app.dialog_input.create_card_sprint_picker.render(

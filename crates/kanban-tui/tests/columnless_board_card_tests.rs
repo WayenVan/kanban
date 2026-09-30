@@ -441,27 +441,19 @@ fn test_the_dialog_fits_within_an_80x24_terminal_without_collapsing() {
 
     fn assert_title_input_has_content_row(grid: &str) {
         let title_row = row_containing(grid, "Task Title:").unwrap();
-        let lines: Vec<&str> = grid.lines().collect();
-        let top_border = lines[title_row + 1];
-        let content = lines[title_row + 2];
-        let bottom_border = lines[title_row + 3];
+        let input = grid.lines().nth(title_row + 1).unwrap_or_default();
         assert!(
-            top_border.contains('┌') && top_border.contains('┐'),
-            "no top border for the title input box at 80x24:\n{grid}"
-        );
-        assert!(
-            bottom_border.contains('└') && bottom_border.contains('┘'),
-            "no bottom border for the title input box at 80x24:\n{grid}"
-        );
-        assert!(
-            !content.contains('┌') && !content.contains('└'),
-            "title input box has no distinct content row at 80x24 (top and bottom border collapsed together):\n{grid}"
+            input.contains("Probe"),
+            "the typed title is not on the input row under its label at 80x24:\n{grid}"
         );
     }
 
     let mut app_no_cols = setup_app_without_columns();
     app_no_cols.focus.active = Focus::Cards;
     app_no_cols.handle_create_card_key();
+    for ch in "Probe".chars() {
+        app_no_cols.handle_create_card_dialog(KeyCode::Char(ch));
+    }
     let grid_no_cols = render_to_string(&mut app_no_cols, width, height);
     assert_title_input_has_content_row(&grid_no_cols);
     assert!(
@@ -472,6 +464,9 @@ fn test_the_dialog_fits_within_an_80x24_terminal_without_collapsing() {
     let mut app_cols = setup_app_with_two_columns();
     app_cols.focus.active = Focus::Cards;
     app_cols.handle_create_card_key();
+    for ch in "Probe".chars() {
+        app_cols.handle_create_card_dialog(KeyCode::Char(ch));
+    }
     let grid_cols = render_to_string(&mut app_cols, width, height);
     assert_title_input_has_content_row(&grid_cols);
     assert!(

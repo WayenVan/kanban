@@ -93,6 +93,12 @@ pub fn popup_bg() -> Style {
     Style::default().bg(POPUP_BG)
 }
 
+/// A text input row: a surface off the popup background, raised a step
+/// while the field has focus.
+pub fn input_field(focused: bool) -> Style {
+    normal_text().bg(selected_bg(focused))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
