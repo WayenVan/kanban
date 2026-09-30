@@ -29,10 +29,12 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 /// A bordered popup centred on the screen and sized to its content: as tall
 /// as the content asks for, as wide as a share of the screen (never
-/// narrower than `min_width`), both clamped to the screen.
+/// narrower than `min_width`), both clamped to the screen. Popups whose
+/// content scrolls take a share of the screen's height instead.
 pub struct Popup<'a> {
     title: Line<'a>,
     content_height: u16,
+    height_percent: Option<u16>,
     width_percent: u16,
     min_width: u16,
     border_style: Style,
@@ -43,6 +45,7 @@ impl<'a> Popup<'a> {
         Self {
             title: title.into(),
             content_height: 1,
+            height_percent: None,
             width_percent: 60,
             min_width: 40,
             border_style: Style::default(),
@@ -51,6 +54,13 @@ impl<'a> Popup<'a> {
 
     pub fn content_height(mut self, rows: u16) -> Self {
         self.content_height = rows;
+        self
+    }
+
+    /// Sizes the popup to a share of the screen's height rather than to
+    /// its content, for content that scrolls.
+    pub fn height_percent(mut self, percent: u16) -> Self {
+        self.height_percent = Some(percent);
         self
     }
 
@@ -69,7 +79,11 @@ impl<'a> Popup<'a> {
         let width = (screen.width * self.width_percent / 100)
             .max(self.min_width)
             .min(screen.width);
-        let height = self.content_height.saturating_add(2).min(screen.height);
+        let height = match self.height_percent {
+            Some(percent) => screen.height * percent / 100,
+            None => self.content_height.saturating_add(2),
+        }
+        .min(screen.height);
         Rect {
             x: screen.x + (screen.width - width) / 2,
             y: screen.y + (screen.height - height) / 2,
@@ -78,20 +92,43 @@ impl<'a> Popup<'a> {
         }
     }
 
-    /// Draws the popup's frame and returns its content area: inside the
+    /// The content area [`Popup::render`] returns on `screen`: inside the
     /// border, one column in from each side.
+    pub fn content_area(&self, screen: Rect) -> Rect {
+        Block::default()
+            .borders(Borders::ALL)
+            .inner(self.area(screen))
+            .inner(Margin::new(1, 0))
+    }
+
+    /// Width of the content area [`Popup::render`] will return on `screen`.
+    pub fn content_width(&self, screen: Rect) -> u16 {
+        self.content_area(screen).width
+    }
+
+    /// Draws the popup's frame and returns its [content area](Popup::content_area).
     pub fn render(self, frame: &mut Frame) -> Rect {
         let area = self.area(frame.area());
+        let content = self.content_area(frame.area());
         frame.render_widget(Clear, area);
         let block = Block::default()
             .title(self.title)
             .borders(Borders::ALL)
             .border_style(self.border_style)
             .style(popup_bg());
-        let inner = block.inner(area);
         frame.render_widget(block, area);
-        inner.inner(Margin::new(1, 0))
+        content
     }
+}
+
+/// Rows `text` takes when wrapped to `width` columns.
+pub fn wrapped_height(text: &str, width: u16) -> u16 {
+    let width = usize::from(width.max(1));
+    text.lines()
+        .map(|line| Line::from(line).width().div_ceil(width).max(1))
+        .sum::<usize>()
+        .try_into()
+        .unwrap_or(u16::MAX)
 }
 
 /// One entry in a popup's vertical stack of rows, for [`fit_rows`].
@@ -109,6 +146,11 @@ impl Slot {
     /// A one-row slot.
     pub fn line(priority: u8) -> Self {
         Self::fixed(1, priority)
+    }
+
+    /// A blank row: it costs nothing to keep and is the first to give way.
+    pub fn gap(priority: u8) -> Self {
+        Self::flexible(1, 0, priority)
     }
 
     pub fn fixed(height: u16, priority: u8) -> Self {
@@ -133,10 +175,11 @@ pub fn slots_height(slots: &[Slot]) -> u16 {
     slots.iter().map(|s| s.height).sum()
 }
 
-/// Stacks `slots` top to bottom in `area`. When they do not fit, flexible
-/// slots shrink towards their minimum first, then the lowest-priority slots
-/// are dropped (`None`) until the rest fit, so the most important rows are
-/// the last to go.
+/// Stacks `slots` top to bottom in `area`. Every slot first gets its
+/// minimum, dropping (`None`) the lowest-priority ones until those fit; the
+/// rows left over then go to the slots that can grow, most important first.
+/// So on a short screen blank rows vanish, then flexible slots shrink, then
+/// the least important rows are dropped.
 pub fn fit_rows(area: Rect, slots: &[Slot]) -> Vec<Option<Rect>> {
     let mut kept: Vec<bool> = vec![true; slots.len()];
     let min_total = |kept: &[bool]| -> u16 {
@@ -158,25 +201,25 @@ pub fn fit_rows(area: Rect, slots: &[Slot]) -> Vec<Option<Rect>> {
     }
 
     let mut spare = area.height.saturating_sub(min_total(&kept));
-    let heights: Vec<u16> = slots
+    let mut heights: Vec<u16> = slots
         .iter()
         .zip(&kept)
-        .map(|(slot, &k)| {
-            if !k {
-                return 0;
-            }
-            let grow = (slot.height - slot.min).min(spare);
-            spare -= grow;
-            slot.min + grow
-        })
+        .map(|(slot, &k)| if k { slot.min } else { 0 })
         .collect();
+    let mut by_importance: Vec<usize> = (0..slots.len()).filter(|&i| kept[i]).collect();
+    by_importance.sort_by_key(|&i| (std::cmp::Reverse(slots[i].priority), i));
+    for i in by_importance {
+        let grow = (slots[i].height - slots[i].min).min(spare);
+        spare -= grow;
+        heights[i] += grow;
+    }
 
     let mut y = area.y;
     heights
         .iter()
         .zip(&kept)
         .map(|(&height, &k)| {
-            k.then(|| {
+            (k && height > 0).then(|| {
                 let rect = Rect { y, height, ..area };
                 y += height;
                 rect
@@ -220,11 +263,11 @@ pub fn render_input_popup(
     cursor_pos: usize,
 ) {
     let slots = [
-        Slot::line(1),
+        Slot::gap(1),
         Slot::line(3),
-        Slot::line(2),
+        Slot::gap(2),
         Slot::line(4),
-        Slot::line(0),
+        Slot::gap(0),
     ];
     let area = Popup::new(title)
         .border_style(focused_border())
@@ -248,28 +291,6 @@ pub fn field_label(text: &str, focused: bool) -> Paragraph<'_> {
         label_text()
     };
     Paragraph::new(text).style(style)
-}
-
-pub fn render_popup_with_block(
-    frame: &mut Frame,
-    title: &str,
-    width_percent: u16,
-    height_percent: u16,
-) -> Rect {
-    let area = centered_rect(width_percent, height_percent, frame.area());
-
-    frame.render_widget(Clear, area);
-
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .border_style(focused_border())
-        .style(popup_bg());
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    inner
 }
 
 #[cfg(test)]
@@ -302,6 +323,24 @@ mod tests {
         let slots = [Slot::line(0), Slot::flexible(10, 3, 5), Slot::line(1)];
         let rows = fit_rows(Rect::new(0, 0, 10, 6), &slots);
         assert_eq!(heights(&rows), vec![Some(1), Some(4), Some(1)]);
+    }
+
+    #[test]
+    fn test_fit_rows_on_a_short_screen_gives_up_gaps_before_shrinking_a_list() {
+        let slots = [
+            Slot::gap(1),
+            Slot::line(5),
+            Slot::gap(2),
+            Slot::flexible(4, 1, 9),
+            Slot::gap(0),
+        ];
+        let rows = fit_rows(Rect::new(0, 0, 10, 6), &slots);
+        assert_eq!(heights(&rows), vec![None, Some(1), Some(1), Some(4), None]);
+    }
+
+    #[test]
+    fn test_wrapped_height_counts_each_line_and_its_wraps() {
+        assert_eq!(wrapped_height("abcdef\n\nxy", 4), 4);
     }
 
     #[test]

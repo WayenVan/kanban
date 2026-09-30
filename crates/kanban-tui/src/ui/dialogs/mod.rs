@@ -11,9 +11,8 @@ pub(super) use sprints::*;
 use crate::components::*;
 use crate::theme::*;
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
     style::{Color, Style},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Paragraph, Wrap},
     Frame,
 };
 
@@ -21,25 +20,29 @@ use ratatui::{
 /// bordered box with a yellow body message and the fixed key hint. Kept in one
 /// place so the two (board/column) delete confirmations cannot drift.
 pub(crate) fn render_confirm_popup(frame: &mut Frame, title: &str, body: String) {
-    let area = centered_rect(60, 40, frame.area());
-    frame.render_widget(Clear, area);
-    let block = Block::default()
-        .title(title.to_string())
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::Black));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([Constraint::Min(0), Constraint::Length(1)])
-        .split(inner);
-    frame.render_widget(
-        Paragraph::new(body).style(Style::default().fg(Color::Yellow)),
-        chunks[0],
-    );
-    frame.render_widget(
-        Paragraph::new("Press ENTER/y to delete, n/ESC to cancel").style(label_text()),
-        chunks[1],
-    );
+    let popup = Popup::new(title.to_string());
+    let body_rows = wrapped_height(&body, popup.content_width(frame.area()));
+    let slots = [
+        Slot::gap(1),
+        Slot::flexible(body_rows, 1, 9),
+        Slot::gap(2),
+        Slot::line(5),
+        Slot::gap(0),
+    ];
+    let area = popup.content_height(slots_height(&slots)).render(frame);
+    let rows = fit_rows(area, &slots);
+    if let Some(row) = rows[1] {
+        frame.render_widget(
+            Paragraph::new(body)
+                .style(Style::default().fg(Color::Yellow))
+                .wrap(Wrap { trim: false }),
+            row,
+        );
+    }
+    if let Some(row) = rows[3] {
+        frame.render_widget(
+            Paragraph::new("Press ENTER/y to delete, n/ESC to cancel").style(label_text()),
+            row,
+        );
+    }
 }

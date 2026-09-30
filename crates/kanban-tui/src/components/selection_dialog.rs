@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::components::RowList;
+use crate::components::{list_popup_frame, render_list_popup, RowList};
 use crate::ui::{load_state_body, render_unavailable_panel};
 use kanban_domain::{LoadState, SprintStatus};
 use kanban_view::selection_dialog::{
@@ -32,34 +32,9 @@ impl SelectionDialog for PriorityDialog {
     }
 
     fn render(&self, app: &App, frame: &mut Frame) {
-        use crate::components::render_selection_popup_with_list_items;
-        use crate::theme::*;
-        use kanban_domain::CardPriority;
-        use ratatui::widgets::ListItem;
+        let rows = priority_rows(app.dialog_input.priority_selection.get());
 
-        let priorities = [
-            CardPriority::Low,
-            CardPriority::Medium,
-            CardPriority::High,
-            CardPriority::Critical,
-        ];
-
-        let selected = app.dialog_input.priority_selection.get();
-
-        let items: Vec<ListItem> = priorities
-            .iter()
-            .enumerate()
-            .map(|(idx, priority)| {
-                let style = if Some(idx) == selected {
-                    bold_highlight()
-                } else {
-                    normal_text()
-                };
-                ListItem::new(format!("{:?}", priority)).style(style)
-            })
-            .collect();
-
-        render_selection_popup_with_list_items(frame, "Set Priority", items, 30, 40);
+        render_list_popup(frame, "Set Priority", None, rows, 30);
     }
 }
 
@@ -81,35 +56,10 @@ impl SelectionDialog for BulkPriorityDialog {
     }
 
     fn render(&self, app: &App, frame: &mut Frame) {
-        use crate::components::render_selection_popup_with_list_items;
-        use crate::theme::*;
-        use kanban_domain::CardPriority;
-        use ratatui::widgets::ListItem;
-
-        let priorities = [
-            CardPriority::Low,
-            CardPriority::Medium,
-            CardPriority::High,
-            CardPriority::Critical,
-        ];
-
-        let selected = app.dialog_input.priority_selection.get();
-
-        let items: Vec<ListItem> = priorities
-            .iter()
-            .enumerate()
-            .map(|(idx, priority)| {
-                let style = if Some(idx) == selected {
-                    bold_highlight()
-                } else {
-                    normal_text()
-                };
-                ListItem::new(format!("{:?}", priority)).style(style)
-            })
-            .collect();
+        let rows = priority_rows(app.dialog_input.priority_selection.get());
 
         let title = format!("Set Priority ({} cards)", self.count);
-        render_selection_popup_with_list_items(frame, &title, items, 35, 40);
+        render_list_popup(frame, &title, None, rows, 35);
     }
 }
 
@@ -156,7 +106,6 @@ impl SelectionDialog for SortFieldDialog {
             app.filter.sort_field_selection.get(),
             active_idx,
             60,
-            50,
         );
     }
 }
@@ -209,7 +158,6 @@ impl SelectionDialog for BoardSortFieldDialog {
             app.filter.board_sort_field_selection.get(),
             active_idx,
             60,
-            50,
         );
     }
 }
@@ -244,36 +192,10 @@ impl SelectionDialog for CarryOverSprintDialog {
     }
 
     fn render(&self, app: &App, frame: &mut Frame) {
-        use crate::components::centered_rect;
-        use ratatui::{
-            layout::{Constraint, Direction, Layout},
-            style::{Color, Style},
-            text::Span,
-            widgets::{Block, Borders, Clear, Paragraph},
-        };
-
-        let area = centered_rect(60, 50, frame.area());
-        frame.render_widget(Clear, area);
+        use ratatui::style::{Color, Style};
+        use ratatui::text::Span;
 
         let title = format!("Carry Over to Sprint ({} cards)", self.card_count);
-        let block = Block::default()
-            .title(title.as_str())
-            .borders(Borders::ALL)
-            .style(Style::default().bg(Color::Black));
-
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .margin(2)
-            .constraints([Constraint::Length(1), Constraint::Min(0)])
-            .split(inner);
-
-        let label =
-            Paragraph::new("Select target sprint:").style(Style::default().fg(Color::Yellow));
-        frame.render_widget(label, chunks[0]);
-
         let mut lines = RowList::new();
 
         if let Some(board) = app.active_board() {
@@ -304,7 +226,7 @@ impl SelectionDialog for CarryOverSprintDialog {
             }
         }
 
-        frame.render_widget(lines.focused(true), chunks[1]);
+        render_list_popup(frame, &title, Some("Select target sprint:"), lines, 60);
     }
 }
 
@@ -332,33 +254,12 @@ impl SelectionDialog for SprintAssignDialog {
     }
 
     fn render(&self, app: &App, frame: &mut Frame) {
-        use crate::components::centered_rect;
-        use ratatui::{
-            layout::{Constraint, Direction, Layout},
-            style::{Color, Style},
-            widgets::{Block, Borders, Clear, Paragraph},
-        };
-
-        let area = centered_rect(60, 50, frame.area());
-        frame.render_widget(Clear, area);
-
-        let block = Block::default()
-            .title("Assign to Sprint")
-            .borders(Borders::ALL)
-            .style(Style::default().bg(Color::Black));
-
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .margin(2)
-            .constraints([Constraint::Length(1), Constraint::Min(0)])
-            .split(inner);
-
-        frame.render_widget(
-            Paragraph::new("Select sprint:").style(Style::default().fg(Color::Yellow)),
-            chunks[0],
+        let list = list_popup_frame(
+            frame,
+            "Assign to Sprint",
+            Some("Select sprint:"),
+            self.options_count(app) as u16,
+            60,
         );
 
         let Some(board) = app.active_board() else {
@@ -368,13 +269,13 @@ impl SelectionDialog for SprintAssignDialog {
             LoadState::Loaded(sprints) => {
                 app.dialog_input.assign_sprint_picker.render(
                     frame,
-                    chunks[1],
+                    list,
                     sprints,
                     board,
                     chrono::Utc::now(),
                 );
             }
-            other => render_unavailable_panel(frame, chunks[1], "Sprint", &other),
+            other => render_unavailable_panel(frame, list, "Sprint", &other),
         }
     }
 }
@@ -395,25 +296,33 @@ impl SelectionDialog for ColumnDefaultStatusDialog {
     }
 
     fn render(&self, app: &App, frame: &mut Frame) {
-        use crate::components::render_selection_popup_with_list_items;
-        use crate::theme::*;
-        use ratatui::widgets::ListItem;
-
         let selected = app.dialog_input.default_status_selection.get();
-
-        let items: Vec<ListItem> = kanban_view::selection_dialog::DEFAULT_STATUS_POPUP_ORDER
+        let mut rows = RowList::new();
+        for (idx, (_, label)) in kanban_view::selection_dialog::DEFAULT_STATUS_POPUP_ORDER
             .iter()
             .enumerate()
-            .map(|(idx, (_, label))| {
-                let style = if Some(idx) == selected {
-                    bold_highlight()
-                } else {
-                    normal_text()
-                };
-                ListItem::new(*label).style(style)
-            })
-            .collect();
+        {
+            rows.push_row(*label, Some(idx) == selected);
+        }
 
-        render_selection_popup_with_list_items(frame, "Set Default Status", items, 30, 40);
+        render_list_popup(frame, "Set Default Status", None, rows, 30);
     }
+}
+
+fn priority_rows(selected: Option<usize>) -> RowList<'static> {
+    use kanban_domain::CardPriority;
+
+    let mut rows = RowList::new();
+    for (idx, priority) in [
+        CardPriority::Low,
+        CardPriority::Medium,
+        CardPriority::High,
+        CardPriority::Critical,
+    ]
+    .iter()
+    .enumerate()
+    {
+        rows.push_row(format!("{:?}", priority), Some(idx) == selected);
+    }
+    rows
 }

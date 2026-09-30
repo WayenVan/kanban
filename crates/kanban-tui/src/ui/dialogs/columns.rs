@@ -2,18 +2,18 @@ use crate::app::App;
 use crate::components::radio_list::ListItem as RadioItem;
 use crate::components::*;
 use crate::theme::*;
-use ratatui::{style::Style, text::Line, widgets::ListItem, Frame};
+use ratatui::{style::Style, text::Line, Frame};
 
 pub(crate) fn render_create_column_popup(app: &App, frame: &mut Frame) {
     let statuses = kanban_view::selection_dialog::DEFAULT_STATUS_POPUP_ORDER;
     let slots = [
-        Slot::line(1),
+        Slot::gap(1),
         Slot::line(5),
         Slot::line(9),
-        Slot::line(2),
+        Slot::gap(2),
         Slot::line(4),
         Slot::flexible(statuses.len() as u16, 1, 8),
-        Slot::line(0),
+        Slot::gap(0),
     ];
     let area = Popup::new("Create New Column")
         .border_style(focused_border())
@@ -97,42 +97,34 @@ pub(crate) fn render_select_task_list_view_popup(app: &App, frame: &mut Frame) {
 
     let current_view = app.active_board().map(|board| board.task_list_view);
 
-    let items: Vec<ListItem> = views
-        .iter()
-        .enumerate()
-        .map(|(idx, view)| {
-            let style = if Some(idx) == selected {
-                bold_highlight()
-            } else {
-                normal_text()
-            };
-            let is_current = current_view == Some(*view);
-            let view_name = match view {
-                TaskListView::Flat => {
-                    if is_current {
-                        "Flat (current)"
-                    } else {
-                        "Flat"
-                    }
+    let mut rows = RowList::new();
+    for (idx, view) in views.iter().enumerate() {
+        let is_current = current_view == Some(*view);
+        let view_name = match view {
+            TaskListView::Flat => {
+                if is_current {
+                    "Flat (current)"
+                } else {
+                    "Flat"
                 }
-                TaskListView::GroupedByColumn => {
-                    if is_current {
-                        "Grouped by Column (current)"
-                    } else {
-                        "Grouped by Column"
-                    }
+            }
+            TaskListView::GroupedByColumn => {
+                if is_current {
+                    "Grouped by Column (current)"
+                } else {
+                    "Grouped by Column"
                 }
-                TaskListView::ColumnView => {
-                    if is_current {
-                        "Column View (kanban board) (current)"
-                    } else {
-                        "Column View (kanban board)"
-                    }
+            }
+            TaskListView::ColumnView => {
+                if is_current {
+                    "Column View (kanban board) (current)"
+                } else {
+                    "Column View (kanban board)"
                 }
-            };
-            ListItem::new(view_name).style(style)
-        })
-        .collect();
+            }
+        };
+        rows.push_row(view_name, Some(idx) == selected);
+    }
 
-    render_selection_popup_with_list_items(frame, "Select Task List View", items, 50, 40);
+    render_list_popup(frame, "Select Task List View", None, rows, 50);
 }

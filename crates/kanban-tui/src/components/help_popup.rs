@@ -1,72 +1,70 @@
 use crate::app::App;
-use crate::components::centered_rect;
-use crate::components::{ListItemConfig, RowList};
+use crate::components::{fit_rows, ListItemConfig, Popup, RowList, Slot};
 use crate::theme::*;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::Paragraph,
     Frame,
 };
 
+const HELP_TITLE: &str = "Help - Keybindings for Current Context";
+
+fn help_popup() -> Popup<'static> {
+    Popup::new(HELP_TITLE)
+        .width_percent(80)
+        .height_percent(80)
+        .border_style(focused_border())
+}
+
+/// The help popup's header, list and footer areas within `content`; the
+/// list is kept longest on a short screen.
+fn help_rows(content: Rect) -> [Option<Rect>; 3] {
+    let rows = fit_rows(
+        content,
+        &[
+            Slot::fixed(2, 4),
+            Slot::flexible(content.height, 1, 9),
+            Slot::fixed(2, 3),
+        ],
+    );
+    [rows[0], rows[1], rows[2]]
+}
+
 pub fn help_popup_viewport_height(frame_area: Rect) -> usize {
-    let popup = centered_rect(80, 80, frame_area);
-    let block = Block::default().borders(Borders::ALL);
-    let inner = block.inner(popup);
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .horizontal_margin(2)
-        .constraints([
-            Constraint::Length(2),
-            Constraint::Min(0),
-            Constraint::Length(2),
-        ])
-        .split(inner);
-    chunks[1].height as usize
+    let [_, list, _] = help_rows(help_popup().content_area(frame_area));
+    list.map_or(0, |list| list.height as usize)
 }
 
 pub fn render_help_popup(app: &App, frame: &mut Frame) {
     use crate::keybindings::KeybindingRegistry;
 
-    let area = centered_rect(80, 80, frame.area());
-    frame.render_widget(Clear, area);
-
-    let block = Block::default()
-        .title("Help - Keybindings for Current Context")
-        .borders(Borders::ALL)
-        .border_style(focused_border());
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .horizontal_margin(2)
-        .constraints([
-            Constraint::Length(2),
-            Constraint::Min(0),
-            Constraint::Length(2),
-        ])
-        .split(inner);
+    let content = help_popup().render(frame);
+    let [header, list, footer_row] = help_rows(content);
 
     let provider = KeybindingRegistry::get_provider(app);
     let context = provider.get_context();
 
-    frame.render_widget(
-        Paragraph::new(vec![
-            Line::from(Span::styled(
-                context.name.clone(),
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-        ]),
-        chunks[0],
-    );
+    if let Some(header) = header {
+        frame.render_widget(
+            Paragraph::new(vec![
+                Line::from(Span::styled(
+                    context.name.clone(),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+            ]),
+            header,
+        );
+    }
+    let Some(list) = list else {
+        return;
+    };
 
-    let raw_height = help_popup_viewport_height(frame.area());
+    let raw_height = list.height as usize;
 
     let selected_idx = app.ui_state.help_list.get_selected_index();
 
@@ -103,7 +101,7 @@ pub fn render_help_popup(app: &App, frame: &mut Frame) {
         "item",
     ));
 
-    frame.render_widget(rows.focused(true), chunks[1]);
+    frame.render_widget(rows.focused(true), list);
 
     let footer = Paragraph::new(vec![
         Line::from(""),
@@ -114,5 +112,7 @@ pub fn render_help_popup(app: &App, frame: &mut Frame) {
                 .add_modifier(Modifier::ITALIC),
         )),
     ]);
-    frame.render_widget(footer, chunks[2]);
+    if let Some(footer_area) = footer_row {
+        frame.render_widget(footer, footer_area);
+    }
 }

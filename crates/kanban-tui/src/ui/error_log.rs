@@ -1,12 +1,11 @@
 use crate::app::App;
-use crate::components::centered_rect;
+use crate::components::{fit_rows, Popup, Slot};
 use crate::error_log::LogLevel;
 use kanban_persistence::PersistenceMetadata;
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
@@ -130,16 +129,11 @@ fn version_is_newer_than_self(file_version: &str, self_version: &str) -> bool {
 }
 
 pub fn render_error_log_popup(app: &App, frame: &mut Frame) {
-    let area = centered_rect(85, 75, frame.area());
-    frame.render_widget(Clear, area);
-
-    let block = Block::default()
-        .title(" Diagnostics [F12] ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let area = Popup::new(" Diagnostics [F12] ")
+        .width_percent(85)
+        .height_percent(75)
+        .border_style(Style::default().fg(Color::Cyan))
+        .render(frame);
 
     let rows = diagnostics_rows(
         app.persistence.save_file.as_deref(),
@@ -147,16 +141,19 @@ pub fn render_error_log_popup(app: &App, frame: &mut Frame) {
     );
     let total = app.with_error_log(|log| log.entries.len());
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .horizontal_margin(1)
-        .constraints([
-            Constraint::Length(rows.len() as u16),
-            Constraint::Length(1), // blank row between diagnostics and log sections
-            Constraint::Min(0),
-            Constraint::Length(2),
-        ])
-        .split(inner);
+    let sections = fit_rows(
+        area,
+        &[
+            Slot::flexible(rows.len() as u16, 1, 5),
+            Slot::gap(1), // blank row between diagnostics and log sections
+            Slot::flexible(
+                area.height.saturating_sub(rows.len() as u16 + 3).max(2),
+                2,
+                9,
+            ),
+            Slot::fixed(2, 3),
+        ],
+    );
 
     let header_lines: Vec<Line> = rows
         .into_iter()
@@ -182,7 +179,12 @@ pub fn render_error_log_popup(app: &App, frame: &mut Frame) {
             ])
         })
         .collect();
-    frame.render_widget(Paragraph::new(header_lines), chunks[0]);
+    if let Some(section) = sections[0] {
+        frame.render_widget(Paragraph::new(header_lines), section);
+    }
+    let Some(log_area) = sections[2] else {
+        return;
+    };
 
     // Log entries sit inside a bordered block whose top border doubles as
     // the visual separator between the diagnostics rows above and the
@@ -196,8 +198,8 @@ pub fn render_error_log_popup(app: &App, frame: &mut Frame) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ));
-    let log_inner = log_block.inner(chunks[2]);
-    frame.render_widget(log_block, chunks[2]);
+    let log_inner = log_block.inner(log_area);
+    frame.render_widget(log_block, log_area);
 
     let viewport_height = log_inner.height as usize;
     let total_entries = total;
@@ -244,7 +246,9 @@ pub fn render_error_log_popup(app: &App, frame: &mut Frame) {
             .fg(Color::DarkGray)
             .add_modifier(Modifier::ITALIC),
     )));
-    frame.render_widget(Paragraph::new(footer_lines), chunks[3]);
+    if let Some(section) = sections[3] {
+        frame.render_widget(Paragraph::new(footer_lines), section);
+    }
 }
 
 #[cfg(test)]

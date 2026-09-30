@@ -1,44 +1,44 @@
 use crate::app::App;
-use crate::components::centered_rect;
+use crate::components::{fit_rows, Popup, Slot};
 use crate::theme::*;
 use crate::ui::load_state_body;
 use kanban_core::viewport::scroll_offset_to_keep_visible;
 use kanban_domain::LoadState;
 use kanban_view::filters::FilterDialogState;
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
 pub fn render_filter_options_popup(app: &App, frame: &mut Frame) {
-    let area = centered_rect(70, 75, frame.area());
-    frame.render_widget(Clear, area);
-
-    let block = Block::default()
-        .title("Filter Options")
-        .borders(Borders::ALL)
-        .border_style(focused_border());
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([
-            Constraint::Min(8),
-            Constraint::Length(3),
-            Constraint::Length(3),
-        ])
-        .split(inner);
+    let area = Popup::new("Filter Options")
+        .width_percent(70)
+        .height_percent(75)
+        .border_style(focused_border())
+        .render(frame);
+    let rows = fit_rows(
+        area,
+        &[
+            Slot::gap(0),
+            Slot::flexible(area.height, 3, 9),
+            Slot::fixed(3, 6),
+            Slot::fixed(3, 5),
+            Slot::gap(1),
+        ],
+    );
 
     if let Some(ref dialog_state) = app.filter.dialog_state {
-        render_filter_sprints_section(app, frame, chunks[0], dialog_state);
-        render_filter_date_range_section(frame, chunks[1], dialog_state.section_index);
-        render_filter_tags_section(frame, chunks[2], dialog_state.section_index);
+        if let Some(row) = rows[1] {
+            render_filter_sprints_section(app, frame, row, dialog_state);
+        }
+        if let Some(row) = rows[2] {
+            render_filter_date_range_section(frame, row, dialog_state.section_index);
+        }
+        if let Some(row) = rows[3] {
+            render_filter_tags_section(frame, row, dialog_state.section_index);
+        }
     }
 }
 

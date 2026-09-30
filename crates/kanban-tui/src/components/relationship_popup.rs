@@ -1,10 +1,9 @@
 use crate::app::App;
-use crate::components::{centered_rect, RowList};
+use crate::components::{fit_rows, Popup, RowList, Slot};
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
@@ -17,30 +16,30 @@ pub fn render_manage_children_popup(app: &App, frame: &mut Frame) {
 }
 
 fn render_relationship_popup(app: &App, frame: &mut Frame, title: &str) {
-    let area = centered_rect(60, 70, frame.area());
-    frame.render_widget(Clear, area);
+    let area = Popup::new(title)
+        .height_percent(70)
+        .border_style(crate::theme::focused_border())
+        .render(frame);
+    let rows = fit_rows(
+        area,
+        &[
+            Slot::gap(0),
+            Slot::fixed(3, 7),
+            Slot::flexible(area.height, 1, 9),
+            Slot::line(5),
+            Slot::gap(1),
+        ],
+    );
 
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::Black));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-        .split(inner);
-
-    render_relationship_search_box(app, frame, chunks[0]);
-    render_relationship_card_list(app, frame, chunks[1]);
-    render_relationship_instructions(app, frame, chunks[2]);
+    if let Some(row) = rows[1] {
+        render_relationship_search_box(app, frame, row);
+    }
+    if let Some(row) = rows[2] {
+        render_relationship_card_list(app, frame, row);
+    }
+    if let Some(row) = rows[3] {
+        render_relationship_instructions(app, frame, row);
+    }
 }
 
 fn render_relationship_search_box(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
@@ -122,7 +121,12 @@ fn render_relationship_card_list(app: &App, frame: &mut Frame, area: ratatui::la
         )));
     }
 
-    frame.render_widget(lines.focused(true), area);
+    let scroll = crate::components::scroll_offset_to_show(
+        lines.selected().unwrap_or(0),
+        lines.len(),
+        area.height as usize,
+    );
+    frame.render_widget(lines.focused(true).scroll(scroll as u16), area);
 }
 
 fn render_relationship_instructions(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {

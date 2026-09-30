@@ -3,9 +3,8 @@ use crate::components::*;
 use crate::ui::render_unavailable_panel;
 use kanban_domain::LoadState;
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    widgets::{Block, Borders, Clear, Paragraph},
+    style::Style,
+    widgets::{Block, Borders},
     Frame,
 };
 
@@ -37,21 +36,21 @@ pub(crate) fn render_create_card_popup(app: &App, frame: &mut Frame) {
 
     const PICKER_ROWS: u16 = 12;
     let mut slots = vec![
-        Slot::line(1),
+        Slot::gap(1),
         Slot::line(5),
         Slot::line(9),
-        Slot::line(2),
+        Slot::gap(2),
         Slot::line(4),
         Slot::line(8),
     ];
     if sprint_visible {
         slots.extend([
-            Slot::line(2),
+            Slot::gap(2),
             Slot::line(3),
             Slot::flexible(PICKER_ROWS, 3, 7),
         ]);
     }
-    slots.push(Slot::line(0));
+    slots.push(Slot::gap(0));
 
     let area = Popup::new("Create New Task")
         .border_style(crate::theme::focused_border())
@@ -181,44 +180,33 @@ pub(crate) fn render_assign_sprint_popup(app: &App, frame: &mut Frame) {
 }
 
 pub(crate) fn render_assign_multiple_cards_popup(app: &App, frame: &mut Frame) {
-    let area = centered_rect(60, 50, frame.area());
-    frame.render_widget(Clear, area);
-
-    let block = Block::default()
-        .title(format!(
-            "Assign {} Cards to Sprint",
-            app.multi_select.selected_cards.len()
-        ))
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::Black));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(inner);
-
-    frame.render_widget(
-        Paragraph::new("Select sprint:").style(Style::default().fg(Color::Yellow)),
-        chunks[0],
+    let title = format!(
+        "Assign {} Cards to Sprint",
+        app.multi_select.selected_cards.len()
     );
-
     let Some(board) = app.active_board() else {
+        list_popup_frame(frame, &title, Some("Select sprint:"), 1, 60);
         return;
     };
-    match app.model.board_sprints_state(board.id) {
+    let sprints = app.model.board_sprints_state(board.id);
+    let list_rows = match &sprints {
+        LoadState::Loaded(sprints) => {
+            kanban_view::sprint_assign_list::build_entries(sprints, board.id, chrono::Utc::now())
+                .len()
+        }
+        _ => 1,
+    };
+    let list = list_popup_frame(frame, &title, Some("Select sprint:"), list_rows as u16, 60);
+    match sprints {
         LoadState::Loaded(sprints) => {
             app.dialog_input.assign_sprint_picker.render(
                 frame,
-                chunks[1],
+                list,
                 sprints,
                 board,
                 chrono::Utc::now(),
             );
         }
-        other => render_unavailable_panel(frame, chunks[1], "Sprint", &other),
+        other => render_unavailable_panel(frame, list, "Sprint", &other),
     }
 }

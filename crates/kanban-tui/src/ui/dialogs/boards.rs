@@ -2,7 +2,6 @@ use crate::app::App;
 use crate::components::*;
 use crate::theme::*;
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
@@ -18,74 +17,81 @@ pub(crate) fn render_export_boards_popup(app: &App, frame: &mut Frame) {
 
     match dialog.step {
         ExportStep::SelectBoards => {
-            let inner = render_popup_with_block(frame, "Select Boards to Export", 60, 60);
+            let slots = [
+                Slot::gap(1),
+                Slot::flexible(dialog.board_ids.len().max(1) as u16, 1, 9),
+                Slot::gap(2),
+                Slot::line(5),
+                Slot::gap(0),
+            ];
+            let area = Popup::new("Select Boards to Export")
+                .border_style(focused_border())
+                .content_height(slots_height(&slots))
+                .render(frame);
+            let rows = fit_rows(area, &slots);
 
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(1)
-                .constraints([Constraint::Min(0), Constraint::Length(1)])
-                .split(inner);
+            let mut list = RowList::new();
+            for (i, &id) in dialog.board_ids.iter().enumerate() {
+                let name = app
+                    .model
+                    .board_by_id_state(id)
+                    .loaded()
+                    .copied()
+                    .map(|b| b.name.as_str())
+                    .unwrap_or("?");
+                let checkbox = if dialog.board_selections.get(i).copied().unwrap_or(false) {
+                    "[x] "
+                } else {
+                    "[ ] "
+                };
+                list.push_row(
+                    Span::styled(
+                        format!("{}{}", checkbox, name),
+                        Style::default().fg(Color::White),
+                    ),
+                    i == dialog.cursor,
+                );
+            }
 
-            let items: Vec<Line> = dialog
-                .board_ids
-                .iter()
-                .enumerate()
-                .map(|(i, &id)| {
-                    let name = app
-                        .model
-                        .board_by_id_state(id)
-                        .loaded()
-                        .copied()
-                        .map(|b| b.name.as_str())
-                        .unwrap_or("?");
-                    let checkbox = if dialog.board_selections.get(i).copied().unwrap_or(false) {
-                        "[x] "
-                    } else {
-                        "[ ] "
-                    };
-                    let style = if i == dialog.cursor {
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::White)
-                    };
-                    Line::from(Span::styled(format!("{}{}", checkbox, name), style))
-                })
-                .collect();
-
-            let list = Paragraph::new(items);
-            frame.render_widget(list, chunks[0]);
-
-            let hint = Paragraph::new(Line::from(vec![Span::styled(
-                "Space: toggle | a: all | Enter: next | Esc: cancel",
-                Style::default().fg(Color::DarkGray),
-            )]));
-            frame.render_widget(hint, chunks[1]);
+            if let Some(row) = rows[1] {
+                let scroll =
+                    scroll_offset_to_show(dialog.cursor, list.len(), usize::from(row.height));
+                frame.render_widget(list.focused(true).scroll(scroll as u16), row);
+            }
+            if let Some(row) = rows[3] {
+                let hint = Paragraph::new("Space: toggle | a: all | Enter: next | Esc: cancel")
+                    .style(label_text());
+                frame.render_widget(hint, row);
+            }
         }
         ExportStep::ExportOptions => {
-            let inner = render_popup_with_block(frame, "Export Options", 60, 30);
-
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(1)
-                .constraints([
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                    Constraint::Length(2),
-                    Constraint::Length(1),
-                    Constraint::Min(0),
-                ])
-                .split(inner);
+            let slots = [
+                Slot::gap(1),
+                Slot::line(9),
+                Slot::gap(2),
+                Slot::line(8),
+                Slot::gap(3),
+                Slot::line(5),
+                Slot::gap(0),
+            ];
+            let area = Popup::new("Export Options")
+                .border_style(focused_border())
+                .content_height(slots_height(&slots))
+                .render(frame);
+            let rows = fit_rows(area, &slots);
+            let draw =
+                |frame: &mut Frame, widget: Paragraph, row: Option<ratatui::layout::Rect>| {
+                    if let Some(row) = row {
+                        frame.render_widget(widget, row);
+                    }
+                };
 
             let filename_label = Paragraph::new(Line::from(vec![
                 Span::styled("Filename: ", Style::default().fg(Color::Cyan)),
                 Span::styled(&dialog.filename, Style::default().fg(Color::White)),
                 Span::styled("_", Style::default().fg(Color::Yellow)),
             ]));
-            frame.render_widget(filename_label, chunks[0]);
-
-            frame.render_widget(Paragraph::new(""), chunks[1]);
+            draw(frame, filename_label, rows[1]);
 
             let json_style = if dialog.format == ExportFormat::Json {
                 Style::default()
@@ -117,13 +123,13 @@ pub(crate) fn render_export_boards_popup(app: &App, frame: &mut Frame) {
                 Span::styled(format!("{} JSON  ", json_radio), json_style),
                 Span::styled(format!("{} SQLite", sqlite_radio), sqlite_style),
             ]));
-            frame.render_widget(format_line, chunks[2]);
+            draw(frame, format_line, rows[3]);
 
             let hint = Paragraph::new(Line::from(vec![Span::styled(
                 "Tab: format | Enter: export | Esc: back",
                 Style::default().fg(Color::DarkGray),
             )]));
-            frame.render_widget(hint, chunks[3]);
+            draw(frame, hint, rows[5]);
         }
     }
 }
@@ -199,31 +205,34 @@ pub(crate) fn render_export_all_popup(app: &App, frame: &mut Frame) {
 }
 
 pub(crate) fn render_import_board_popup(app: &App, frame: &mut Frame) {
-    let inner = render_popup_with_block(frame, "Import Projects", 60, 50);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(inner);
-
-    let label = Paragraph::new("Select a JSON file to import:").style(highlight_text());
-    frame.render_widget(label, chunks[0]);
-
-    if app.dialog_input.import_files.is_empty() {
+    let files = &app.dialog_input.import_files;
+    if files.is_empty() {
+        let list = list_popup_frame(
+            frame,
+            "Import Projects",
+            Some("Select a JSON file to import:"),
+            1,
+            60,
+        );
         let empty_msg =
             Paragraph::new("No JSON files found in current directory").style(label_text());
-        frame.render_widget(empty_msg, chunks[1]);
-    } else {
-        let mut rows = RowList::new();
-        for (idx, filename) in app.dialog_input.import_files.iter().enumerate() {
-            rows.push_row(
-                styled_list_item(filename, &ListItemConfig::new()),
-                app.dialog_input.import_selection.get() == Some(idx),
-            );
-        }
-        frame.render_widget(rows.focused(true), chunks[1]);
+        frame.render_widget(empty_msg, list);
+        return;
     }
+    let mut rows = RowList::new();
+    for (idx, filename) in files.iter().enumerate() {
+        rows.push_row(
+            styled_list_item(filename, &ListItemConfig::new()),
+            app.dialog_input.import_selection.get() == Some(idx),
+        );
+    }
+    render_list_popup(
+        frame,
+        "Import Projects",
+        Some("Select a JSON file to import:"),
+        rows,
+        60,
+    );
 }
 
 pub(crate) fn render_set_branch_prefix_popup(app: &App, frame: &mut Frame) {
@@ -240,17 +249,17 @@ pub(crate) fn render_choose_storage_file_popup(app: &App, frame: &mut Frame) {
     use crate::app::StorageBackendChoice;
 
     let slots = [
-        Slot::line(0),
+        Slot::gap(0),
         Slot::flexible(3, 1, 6), // description
-        Slot::line(1),
+        Slot::gap(1),
         Slot::line(5),           // "Filename:" label
         Slot::line(9),           // input
         Slot::flexible(2, 1, 4), // resolved-path preview (wraps if long)
-        Slot::line(2),
+        Slot::gap(2),
         Slot::line(7), // format radio
-        Slot::line(1),
+        Slot::gap(1),
         Slot::line(3), // hint
-        Slot::line(0),
+        Slot::gap(0),
     ];
     let area = Popup::new("No board file configured")
         .width_percent(70)
