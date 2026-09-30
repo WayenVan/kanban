@@ -1,3 +1,4 @@
+use crate::components::RowList;
 use ratatui::{layout::Rect, text::Line, widgets::Paragraph, Frame};
 
 pub struct ListItem<T> {
@@ -54,7 +55,10 @@ impl<'a, T> RadioList<'a, T> {
         let height = area.height as usize;
         let sel = selected.unwrap_or(0);
         let scroll = scroll_offset_to_show(sel, total, height);
-        let list = Paragraph::new(lines).scroll((scroll as u16, 0));
+        let list = RowList::from(lines)
+            .select(selected)
+            .focused(true)
+            .scroll(scroll as u16);
         frame.render_widget(list, area);
 
         if let Some(f) = &self.sticky_header_for {

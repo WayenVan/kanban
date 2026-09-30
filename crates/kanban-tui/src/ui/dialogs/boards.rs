@@ -215,15 +215,14 @@ pub(crate) fn render_import_board_popup(app: &App, frame: &mut Frame) {
             Paragraph::new("No JSON files found in current directory").style(label_text());
         frame.render_widget(empty_msg, chunks[1]);
     } else {
-        let mut lines = vec![];
+        let mut rows = RowList::new();
         for (idx, filename) in app.dialog_input.import_files.iter().enumerate() {
-            let config = ListItemConfig::new()
-                .selected(app.dialog_input.import_selection.get() == Some(idx))
-                .focused(true);
-            lines.push(styled_list_item(filename, &config));
+            rows.push_row(
+                styled_list_item(filename, &ListItemConfig::new()),
+                app.dialog_input.import_selection.get() == Some(idx),
+            );
         }
-        let list = Paragraph::new(lines);
-        frame.render_widget(list, chunks[1]);
+        frame.render_widget(rows.focused(true), chunks[1]);
     }
 }
 

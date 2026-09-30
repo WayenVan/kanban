@@ -131,12 +131,9 @@ impl<'a> SprintPickerView<'a> {
             .iter()
             .enumerate()
             .map(|(idx, entry)| {
-                let is_checked = checked == Some(idx);
-                let is_focused = cursor == Some(idx);
                 let label = render_entry_line(
                     entry,
-                    is_checked,
-                    is_focused,
+                    checked == Some(idx),
                     self.current_sprint_id,
                     self.board,
                 );

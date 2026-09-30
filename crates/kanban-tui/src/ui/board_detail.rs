@@ -150,7 +150,8 @@ fn render_board_sprints_list(
         .with_focus_indicator("Sprints [4]")
         .focused(app.focus.board_focus == BoardFocus::Sprints);
 
-    let mut sprint_lines = vec![];
+    let is_focused = app.focus.board_focus == BoardFocus::Sprints;
+    let mut sprint_lines = RowList::new();
 
     let board_sprints_view = app.board_sprints_view(board.id);
     match &board_sprints_view {
@@ -164,7 +165,6 @@ fn render_board_sprints_list(
                 let all_cards = app.controller.live_cards().loaded().copied().unwrap_or(&[]);
                 for (sprint_idx, sprint) in board_sprints.iter().enumerate() {
                     let is_selected = app.selection.sprint.get() == Some(sprint_idx);
-                    let is_focused = app.focus.board_focus == BoardFocus::Sprints;
 
                     let status_symbol = match sprint.status {
                         SprintStatus::Planning => "○",
@@ -183,37 +183,24 @@ fn render_board_sprints_list(
                     let is_active_sprint = board.active_sprint_id == Some(sprint.id);
                     let is_ended = sprint.is_ended(chrono::Utc::now());
 
-                    let mut base_style = normal_text();
-                    if is_selected {
-                        base_style = on_selection(base_style, is_focused);
-                    }
-
                     let mut spans = vec![
                         Span::styled(
                             format!("{} ", status_symbol),
                             sprint_status_style(sprint.status),
                         ),
-                        Span::styled(sprint_name, base_style),
+                        Span::styled(sprint_name, normal_text()),
                         Span::styled(format!(" ({})", card_count), label_text()),
                     ];
 
                     if is_active_sprint {
-                        let mut active_style = active_item();
-                        if is_selected {
-                            active_style = on_selection(active_style, is_focused);
-                        }
-                        spans.push(Span::styled(" Active", active_style));
+                        spans.push(Span::styled(" Active", active_item()));
                     }
 
                     if is_ended {
-                        let mut ended_style = ended_marker();
-                        if is_selected {
-                            ended_style = on_selection(ended_style, is_focused);
-                        }
-                        spans.push(Span::styled(" Ended", ended_style));
+                        spans.push(Span::styled(" Ended", ended_marker()));
                     }
 
-                    sprint_lines.push(Line::from(spans));
+                    sprint_lines.push_row(Line::from(spans), is_selected);
                 }
             }
         }
@@ -231,9 +218,10 @@ fn render_board_sprints_list(
         viewport_height,
     );
     app.selection.sprint_scroll.set(scroll);
-    let sprints = Paragraph::new(sprint_lines)
+    let sprints = sprint_lines
+        .focused(is_focused)
         .block(sprints_config.block())
-        .scroll((scroll as u16, 0));
+        .scroll(scroll as u16);
     frame.render_widget(sprints, area);
 }
 
@@ -247,7 +235,8 @@ fn render_board_columns_list(
         .with_focus_indicator("Columns [5]")
         .focused(app.focus.board_focus == BoardFocus::Columns);
 
-    let mut column_lines = vec![];
+    let is_focused = app.focus.board_focus == BoardFocus::Columns;
+    let mut column_lines = RowList::new();
 
     match app.model.board_columns_state(board.id) {
         LoadState::Loaded(columns) => {
@@ -264,7 +253,6 @@ fn render_board_columns_list(
                 )));
             } else {
                 let all_cards = app.controller.live_cards().loaded().copied().unwrap_or(&[]);
-                let is_focused = app.focus.board_focus == BoardFocus::Columns;
                 let viewport_height = area.height.saturating_sub(2) as usize;
                 let primary_completion_id =
                     kanban_domain::completion_derivation::primary_completion_column(
@@ -298,28 +286,25 @@ fn render_board_columns_list(
                         .filter(|c| c.column_id == column.id)
                         .count();
 
-                    let mut base_style = normal_text();
-                    if is_selected {
-                        base_style = on_selection(base_style, is_focused);
-                    }
-
                     let mut spans = vec![
                         Span::styled(format!("{}. ", column.position + 1), label_text()),
-                        Span::styled(column.name.clone(), base_style),
+                        Span::styled(column.name.clone(), normal_text()),
                         Span::styled(format!(" ({})", card_count), label_text()),
                     ];
                     if let Some(suffix) = column_status_suffix(column, primary_completion_id) {
                         spans.push(Span::styled(format!(" {}", suffix), label_text()));
                     }
 
-                    column_lines.push(Line::from(spans));
+                    column_lines.push_row(Line::from(spans), is_selected);
                 }
             }
         }
         other => column_lines.extend(load_state_body("Columns", &other)),
     }
 
-    let columns_widget = Paragraph::new(column_lines).block(columns_config.block());
+    let columns_widget = column_lines
+        .focused(is_focused)
+        .block(columns_config.block());
     frame.render_widget(columns_widget, area);
 }
 

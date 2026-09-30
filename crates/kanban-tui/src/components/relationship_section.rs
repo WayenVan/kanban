@@ -1,4 +1,4 @@
-use crate::components::ListItemConfig;
+use crate::components::RowList;
 use crate::theme::*;
 use kanban_domain::Card;
 use kanban_domain::Model;
@@ -24,8 +24,8 @@ pub fn render_relationship_section(
     is_focused: bool,
     list_component: &ListComponent,
     viewport_height: usize,
-) -> Vec<Line<'static>> {
-    let mut lines: Vec<Line> = Vec::new();
+) -> RowList<'static> {
+    let mut lines = RowList::new();
 
     if card_ids.is_empty() {
         // Empty case
@@ -50,19 +50,11 @@ pub fn render_relationship_section(
         for &idx in &page_info.visible_indices {
             if let Some(&card_id) = card_ids.get(idx) {
                 if let Some(card) = cards.iter().find(|c| c.id == card_id) {
-                    let is_selected = list_component.selection.get() == Some(idx);
-
-                    let config = ListItemConfig::new()
-                        .selected(is_selected)
-                        .focused(is_selected && is_focused);
-
-                    let style = config.item_style();
-
                     let line = Line::from(vec![
                         Span::styled("→ ", label_text()),
-                        Span::styled(card.title.clone(), style),
+                        Span::styled(card.title.clone(), normal_text()),
                     ]);
-                    lines.push(line);
+                    lines.push_row(line, list_component.selection.get() == Some(idx));
                 }
             }
         }
@@ -80,5 +72,5 @@ pub fn render_relationship_section(
         lines.push(Line::from(""));
     }
 
-    lines
+    lines.focused(is_focused)
 }

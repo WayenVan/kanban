@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::theme::on_selection;
+use crate::components::RowList;
 use crate::ui::{load_state_body, render_unavailable_panel};
 use kanban_domain::{LoadState, SprintStatus};
 use kanban_view::selection_dialog::{
@@ -248,7 +248,7 @@ impl SelectionDialog for CarryOverSprintDialog {
         use ratatui::{
             layout::{Constraint, Direction, Layout},
             style::{Color, Style},
-            text::{Line, Span},
+            text::Span,
             widgets::{Block, Borders, Clear, Paragraph},
         };
 
@@ -274,7 +274,7 @@ impl SelectionDialog for CarryOverSprintDialog {
             Paragraph::new("Select target sprint:").style(Style::default().fg(Color::Yellow));
         frame.render_widget(label, chunks[0]);
 
-        let mut lines = vec![];
+        let mut lines = RowList::new();
 
         if let Some(board) = app.active_board() {
             match app.model.board_sprints_state(board.id) {
@@ -288,28 +288,23 @@ impl SelectionDialog for CarryOverSprintDialog {
                         let is_selected =
                             app.dialog_input.carry_over_sprint_selection.get() == Some(idx);
 
-                        let style = Style::default().fg(Color::White);
-                        let style = if is_selected {
-                            on_selection(style, true)
-                        } else {
-                            style
-                        };
-
                         let prefix = if is_selected { "> " } else { "  " };
                         let sprint_name = sprint.formatted_name(board, None);
 
-                        lines.push(Line::from(Span::styled(
-                            format!("{}{}", prefix, sprint_name),
-                            style,
-                        )));
+                        lines.push_row(
+                            Span::styled(
+                                format!("{}{}", prefix, sprint_name),
+                                Style::default().fg(Color::White),
+                            ),
+                            is_selected,
+                        );
                     }
                 }
                 other => lines.extend(load_state_body("Sprints", &other)),
             }
         }
 
-        let list = Paragraph::new(lines);
-        frame.render_widget(list, chunks[1]);
+        frame.render_widget(lines.focused(true), chunks[1]);
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::components::centered_rect;
-use crate::components::ListItemConfig;
+use crate::components::{ListItemConfig, RowList};
 use crate::theme::*;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -76,39 +76,34 @@ pub fn render_help_popup(app: &App, frame: &mut Frame) {
         .get_adjusted_viewport_height(raw_height);
     let page_info = app.ui_state.help_list.get_render_info(adjusted_height);
 
-    let mut rendered_lines: Vec<Line> = crate::scroll_indicators::render_above_indicator(
+    let mut rows = RowList::new();
+    rows.extend(crate::scroll_indicators::render_above_indicator(
         page_info.show_above_indicator,
         page_info.items_above,
         "item",
-    )
-    .into_iter()
-    .collect();
+    ));
 
-    let visible_lines: Vec<Line> = page_info
-        .visible_indices
-        .iter()
-        .filter_map(|&i| {
-            let binding = context.bindings.get(i)?;
-            let is_selected = selected_idx == Some(i);
-            let config = ListItemConfig::new().selected(is_selected).focused(true);
-            let prefix = config.item_prefix();
-            let style = config.item_style();
-            Some(Line::from(vec![
-                Span::styled(prefix.to_string(), style),
-                Span::styled(binding.key.to_string(), Style::default().fg(Color::Yellow)),
-                Span::raw(" "),
-                Span::styled(binding.description.clone(), style),
-            ]))
-        })
-        .collect();
-    rendered_lines.extend(visible_lines);
-    rendered_lines.extend(crate::scroll_indicators::render_below_indicator(
+    let config = ListItemConfig::new();
+    for &i in &page_info.visible_indices {
+        let Some(binding) = context.bindings.get(i) else {
+            continue;
+        };
+        let style = config.item_style();
+        let line = Line::from(vec![
+            Span::styled(config.item_prefix().to_string(), style),
+            Span::styled(binding.key.to_string(), Style::default().fg(Color::Yellow)),
+            Span::raw(" "),
+            Span::styled(binding.description.clone(), style),
+        ]);
+        rows.push_row(line, selected_idx == Some(i));
+    }
+    rows.extend(crate::scroll_indicators::render_below_indicator(
         page_info.show_below_indicator,
         page_info.items_below,
         "item",
     ));
 
-    frame.render_widget(Paragraph::new(rendered_lines), chunks[1]);
+    frame.render_widget(rows.focused(true), chunks[1]);
 
     let footer = Paragraph::new(vec![
         Line::from(""),

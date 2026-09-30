@@ -228,7 +228,7 @@ pub(super) fn render_sprint_task_panel_with_selection(
     title_suffix: &str,
     is_focused: bool,
 ) {
-    let mut lines = vec![];
+    let mut lines = RowList::new();
     let selected_idx = task_list.get_selected_index();
 
     if task_list.is_empty() {
@@ -261,14 +261,12 @@ pub(super) fn render_sprint_task_panel_with_selection(
                         board,
                         sprints,
                         sprints_tier,
-                        is_selected,
-                        is_focused,
                         is_multi_selected: false,
                         show_sprint_name: false,
                         animation_type,
                         search_query: None,
                     });
-                    lines.push(line);
+                    lines.push_row(line, is_selected);
                 }
             }
         }
@@ -295,7 +293,7 @@ pub(super) fn render_sprint_task_panel_with_selection(
         Style::default().fg(Color::DarkGray)
     };
 
-    let content = Paragraph::new(lines).block(
+    let content = lines.focused(is_focused).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(border_style)

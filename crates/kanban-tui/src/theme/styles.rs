@@ -1,5 +1,6 @@
 use super::colors::*;
 use kanban_domain::{CardPriority, SprintStatus};
+use ratatui::buffer::Cell;
 use ratatui::style::{Color, Modifier, Style};
 
 pub fn ended_marker() -> Style {
@@ -18,14 +19,13 @@ pub fn deleted_view_focused_border() -> Style {
     Style::default().fg(ratatui::style::Color::Yellow)
 }
 
-/// `style` on the selected row: the background changes, and dimmed text is
-/// lifted a step so it stays readable on it; other colours are kept.
-pub fn on_selection(style: Style, focused: bool) -> Style {
-    let style = style.bg(selected_bg(focused));
-    if style.fg == Some(Color::DarkGray) {
-        style.fg(selected_dim_text())
-    } else {
-        style
+/// Restyles one cell of the selected row: the selection surface replaces its
+/// background, and dimmed text is lifted a step so it stays readable on it;
+/// other colours are kept.
+pub fn select_cell(cell: &mut Cell, focused: bool) {
+    cell.bg = selected_bg(focused);
+    if cell.fg == Color::DarkGray {
+        cell.fg = selected_dim_text();
     }
 }
 
@@ -98,12 +98,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn on_selection_lifts_dim_text_and_keeps_other_colours() {
-        let dim = on_selection(Style::default().fg(Color::DarkGray), true);
-        assert_eq!(dim.fg, Some(selected_dim_text()));
-        assert_eq!(dim.bg, Some(selected_bg(true)));
+    fn test_select_cell_lifts_dim_text_and_keeps_other_colours() {
+        let mut dim = Cell::default();
+        dim.set_fg(Color::DarkGray);
+        select_cell(&mut dim, true);
+        assert_eq!(dim.fg, selected_dim_text());
+        assert_eq!(dim.bg, selected_bg(true));
 
-        let yellow = on_selection(Style::default().fg(Color::Yellow), true);
-        assert_eq!(yellow.fg, Some(Color::Yellow));
+        let mut yellow = Cell::default();
+        yellow.set_fg(Color::Yellow);
+        select_cell(&mut yellow, true);
+        assert_eq!(yellow.fg, Color::Yellow);
     }
 }

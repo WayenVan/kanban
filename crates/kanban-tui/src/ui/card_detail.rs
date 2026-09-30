@@ -71,7 +71,7 @@ pub(super) fn render_relationship_boxes(
         &app.relationship.parents_list,
         viewport_height,
     );
-    let parents_widget = Paragraph::new(parents_lines).block(parents_config.block());
+    let parents_widget = parents_lines.block(parents_config.block());
     frame.render_widget(parents_widget, relationship_chunks[0]);
 
     // Render Children section
@@ -88,7 +88,7 @@ pub(super) fn render_relationship_boxes(
         &app.relationship.children_list,
         viewport_height,
     );
-    let children_widget = Paragraph::new(children_lines).block(children_config.block());
+    let children_widget = children_lines.block(children_config.block());
     frame.render_widget(children_widget, relationship_chunks[1]);
 }
 

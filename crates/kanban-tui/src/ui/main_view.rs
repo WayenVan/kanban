@@ -7,7 +7,6 @@ use kanban_view::panel_titles::{PanelCount, TasksPanelKind, TasksPanelTitle};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::Paragraph,
     Frame,
 };
 
@@ -30,7 +29,7 @@ pub(super) fn render_main(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub(super) fn render_projects_panel(app: &App, frame: &mut Frame, area: Rect) {
-    let mut lines = vec![];
+    let mut lines = RowList::new();
     // The archived-boards view shows the archived board heads in the projects
     // panel (mirroring how ArchivedCardsView shows archived cards in the tasks
     // panel); everywhere else it shows the LIVE boards. Keyed on the stack-aware
@@ -71,12 +70,13 @@ pub(super) fn render_projects_panel(app: &App, frame: &mut Frame, area: Rect) {
 
         for idx in &render_info.visible_indices {
             if let Some(board) = boards.get(*idx) {
-                let config = ListItemConfig::new()
-                    .selected(selected_idx == Some(*idx))
-                    .focused(app.focus.active == Focus::Boards)
-                    .active(app.selection.active_board_id == Some(board.id));
+                let config =
+                    ListItemConfig::new().active(app.selection.active_board_id == Some(board.id));
 
-                lines.push(styled_list_item(&board.name, &config));
+                lines.push_row(
+                    styled_list_item(&board.name, &config),
+                    selected_idx == Some(*idx),
+                );
             }
         }
 
@@ -109,8 +109,8 @@ pub(super) fn render_projects_panel(app: &App, frame: &mut Frame, area: Rect) {
         panel_config = panel_config.with_custom_border_style(deleted_view_focused_border());
     }
 
-    let content = Paragraph::new(lines);
-    render_panel(frame, area, &panel_config, content);
+    let content = lines.focused(boards_focused).block(panel_config.block());
+    frame.render_widget(content, area);
 }
 
 /// Joins `kanban-view`'s structured filter labels into the terminal title

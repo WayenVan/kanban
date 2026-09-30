@@ -29,8 +29,6 @@ pub struct CardListItemConfig<'a> {
     pub board: &'a Board,
     pub sprints: &'a [Sprint],
     pub sprints_tier: SprintTier,
-    pub is_selected: bool,
-    pub is_focused: bool,
     pub is_multi_selected: bool,
     pub show_sprint_name: bool,
     pub animation_type: Option<AnimationType>,
@@ -58,9 +56,6 @@ pub fn render_card_list_item(config: CardListItemConfig) -> Line<'static> {
         };
         base_style = base_style.bg(flash_bg);
         title_style = title_style.bg(flash_bg);
-    } else if config.is_selected {
-        base_style = on_selection(base_style, config.is_focused);
-        title_style = on_selection(title_style, config.is_focused);
     }
 
     let suffix_text = if config.show_sprint_name {
@@ -82,29 +77,23 @@ pub fn render_card_list_item(config: CardListItemConfig) -> Line<'static> {
 
     // One glyph carries both: the story points as a bold digit (a dot when
     // unestimated), coloured by priority.
-    let (priority_glyph, mut priority_glyph_style) = match config.card.points {
+    let (priority_glyph, priority_glyph_style) = match config.card.points {
         Some(points) => (
             points.to_string(),
             priority_style(config.card.priority).add_modifier(Modifier::BOLD),
         ),
         None => ("●".to_string(), priority_style(config.card.priority)),
     };
-    if config.is_selected {
-        priority_glyph_style = on_selection(priority_glyph_style, config.is_focused);
-    }
 
     let title_spans = build_title_spans(&config.card.title, title_style, config.search_query);
 
     // Multi-selected cards get a coloured block in the leftmost cell, so the
     // marker costs no extra width and stacks with the cursor highlight.
-    let (marker, mut marker_style) = if config.is_multi_selected {
+    let (marker, marker_style) = if config.is_multi_selected {
         ("▌", Style::default().fg(MULTI_SELECT_MARKER))
     } else {
         (" ", Style::default())
     };
-    if config.is_selected {
-        marker_style = on_selection(marker_style, config.is_focused);
-    }
 
     let mut spans = vec![
         Span::styled(marker, marker_style),
@@ -114,11 +103,7 @@ pub fn render_card_list_item(config: CardListItemConfig) -> Line<'static> {
     spans.extend(title_spans);
 
     if !suffix_text.is_empty() {
-        let mut suffix_style = label_text();
-        if config.is_selected {
-            suffix_style = on_selection(suffix_style, config.is_focused);
-        }
-        spans.push(Span::styled(suffix_text, suffix_style));
+        spans.push(Span::styled(suffix_text, label_text()));
     }
 
     Line::from(spans)
@@ -374,8 +359,6 @@ mod tests {
             board: &board,
             sprints: &[],
             sprints_tier: SprintTier::Loaded,
-            is_selected: false,
-            is_focused: false,
             is_multi_selected,
             show_sprint_name: false,
             animation_type: None,
@@ -408,8 +391,6 @@ mod tests {
             board: &board,
             sprints: &[],
             sprints_tier: SprintTier::Pending,
-            is_selected: false,
-            is_focused: false,
             is_multi_selected: false,
             show_sprint_name: true,
             animation_type: None,
@@ -436,8 +417,6 @@ mod tests {
             board: &board,
             sprints: &[],
             sprints_tier: SprintTier::Unavailable,
-            is_selected: false,
-            is_focused: false,
             is_multi_selected: false,
             show_sprint_name: true,
             animation_type: None,

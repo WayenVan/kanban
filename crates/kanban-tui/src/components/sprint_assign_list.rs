@@ -1,4 +1,3 @@
-use crate::theme::on_selection;
 use kanban_domain::Board;
 use kanban_view::sprint_assign_list::SprintAssignEntry;
 use ratatui::{
@@ -14,7 +13,6 @@ use uuid::Uuid;
 pub fn render_entry_line(
     entry: &SprintAssignEntry<'_>,
     is_checked: bool,
-    is_focused: bool,
     current_sprint_id: Option<Uuid>,
     board: &Board,
 ) -> Line<'static> {
@@ -36,11 +34,6 @@ pub fn render_entry_line(
             } else {
                 Style::default().fg(Color::White)
             };
-            let style = if is_focused {
-                on_selection(style, true)
-            } else {
-                style
-            };
             Line::from(Span::styled(format!("{}(None){}", prefix, suffix), style))
         }
         SprintAssignEntry::ActiveOrPlanned(s) => {
@@ -53,11 +46,6 @@ pub fn render_entry_line(
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
-            };
-            let style = if is_focused {
-                on_selection(style, true)
-            } else {
-                style
             };
             Line::from(Span::styled(
                 format!("{}{}{}", prefix, s.formatted_name(board, None), suffix),
@@ -74,11 +62,6 @@ pub fn render_entry_line(
                 Color::Red
             };
             let style = Style::default().fg(status_color);
-            let style = if is_focused {
-                on_selection(style, true)
-            } else {
-                style
-            };
             Line::from(Span::styled(
                 format!("{}{}{}", prefix, s.formatted_name(board, None), suffix),
                 style,
@@ -131,7 +114,7 @@ mod tests {
     fn test_render_entry_line_marks_checked_with_filled_checkbox() {
         let board = make_board_for_render();
         let entry = SprintAssignEntry::None;
-        let line = render_entry_line(&entry, /*is_checked=*/ true, false, None, &board);
+        let line = render_entry_line(&entry, /*is_checked=*/ true, None, &board);
         assert!(
             line_to_string(&line).starts_with("[x]"),
             "checked row should start with [x], got: {:?}",
@@ -143,7 +126,7 @@ mod tests {
     fn test_render_entry_line_marks_unchecked_with_empty_checkbox() {
         let board = make_board_for_render();
         let entry = SprintAssignEntry::None;
-        let line = render_entry_line(&entry, /*is_checked=*/ false, false, None, &board);
+        let line = render_entry_line(&entry, /*is_checked=*/ false, None, &board);
         assert!(
             line_to_string(&line).starts_with("[ ]"),
             "unchecked row should start with [ ], got: {:?}",
@@ -157,8 +140,8 @@ mod tests {
         let sprint = make_sprint(1, board.id, SprintStatus::Planning, None);
         let entry = SprintAssignEntry::ActiveOrPlanned(&sprint);
 
-        let checked = render_entry_line(&entry, true, false, None, &board);
-        let unchecked = render_entry_line(&entry, false, false, None, &board);
+        let checked = render_entry_line(&entry, true, None, &board);
+        let unchecked = render_entry_line(&entry, false, None, &board);
 
         assert!(line_to_string(&checked).starts_with("[x]"));
         assert!(line_to_string(&unchecked).starts_with("[ ]"));
@@ -168,26 +151,11 @@ mod tests {
     fn test_render_entry_line_header_has_no_checkbox() {
         let board = make_board_for_render();
         let entry = SprintAssignEntry::Header(ACTIVE_PLANNED_HEADER);
-        let line = render_entry_line(&entry, false, false, None, &board);
+        let line = render_entry_line(&entry, false, None, &board);
         let text = line_to_string(&line);
         assert!(
             !text.contains("[x]") && !text.contains("[ ]"),
             "section headers should not render a checkbox, got: {text:?}"
         );
-    }
-
-    #[test]
-    fn test_render_entry_line_checked_and_focused_are_independent() {
-        let board = make_board_for_render();
-        let sprint = make_sprint(1, board.id, SprintStatus::Planning, None);
-        let entry = SprintAssignEntry::ActiveOrPlanned(&sprint);
-
-        // Checked but cursor is elsewhere: [x] without blue background.
-        let checked_only = render_entry_line(&entry, true, false, None, &board);
-        // Focused but not checked: [ ] with blue background.
-        let focused_only = render_entry_line(&entry, false, true, None, &board);
-
-        assert!(line_to_string(&checked_only).starts_with("[x]"));
-        assert!(line_to_string(&focused_only).starts_with("[ ]"));
     }
 }

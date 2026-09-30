@@ -1,12 +1,13 @@
-use crate::theme::{active_item, normal_text, on_selection};
+use crate::theme::{active_item, normal_text};
 use ratatui::{
     style::Style,
     text::{Line, Span},
 };
 
+/// How a list row looks apart from the cursor, which [`RowList`] paints.
+///
+/// [`RowList`]: crate::components::RowList
 pub struct ListItemConfig {
-    pub is_selected: bool,
-    pub is_focused: bool,
     pub is_active: bool,
     pub is_multi_selected: bool,
 }
@@ -14,21 +15,9 @@ pub struct ListItemConfig {
 impl ListItemConfig {
     pub fn new() -> Self {
         Self {
-            is_selected: false,
-            is_focused: false,
             is_active: false,
             is_multi_selected: false,
         }
-    }
-
-    pub fn selected(mut self, selected: bool) -> Self {
-        self.is_selected = selected;
-        self
-    }
-
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.is_focused = focused;
-        self
     }
 
     pub fn active(mut self, active: bool) -> Self {
@@ -42,17 +31,11 @@ impl ListItemConfig {
     }
 
     pub fn item_style(&self) -> Style {
-        let mut style = normal_text();
-
         if self.is_active {
-            style = active_item();
+            active_item()
+        } else {
+            normal_text()
         }
-
-        if self.is_selected {
-            style = on_selection(style, self.is_focused);
-        }
-
-        style
     }
 
     pub fn item_prefix(&self) -> &'static str {

@@ -1,4 +1,6 @@
-use crate::components::{centered_rect, render_popup_with_block, styled_list_item, ListItemConfig};
+use crate::components::{
+    centered_rect, render_popup_with_block, styled_list_item, ListItemConfig, RowList,
+};
 use crate::theme::*;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -68,25 +70,21 @@ pub fn render_selection_popup_with_lines<'a, I, F>(
         chunks[0]
     };
 
-    let mut lines = vec![];
+    let mut rows = RowList::new();
     for (idx, item) in items.into_iter().enumerate() {
         let is_selected = selected_idx == Some(idx);
         let is_active = active_idx == Some(idx);
         let (text, suffix) = format_fn(idx, &item, is_selected, is_active);
 
-        let config = ListItemConfig::new()
-            .selected(is_selected)
-            .focused(true)
-            .active(is_active);
+        let config = ListItemConfig::new().active(is_active);
 
         let mut line_text = text;
         if let Some(suffix_text) = suffix {
             line_text.push_str(&suffix_text);
         }
 
-        lines.push(styled_list_item(line_text, &config));
+        rows.push_row(styled_list_item(line_text, &config), is_selected);
     }
 
-    let list = Paragraph::new(lines);
-    frame.render_widget(list, list_chunk);
+    frame.render_widget(rows.focused(true), list_chunk);
 }

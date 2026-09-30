@@ -1,7 +1,7 @@
 use crate::app::App;
 use crate::components::{
     card_list_item::{render_card_list_item, CardListItemConfig, SprintTier},
-    PanelConfig,
+    PanelConfig, RowList,
 };
 use crate::theme::{deleted_view_focused_border, label_text};
 use crate::ui::load_state_body;
@@ -62,7 +62,7 @@ impl SinglePanelRenderer {
 
 impl RenderStrategy for SinglePanelRenderer {
     fn render(&self, app: &App, frame: &mut Frame, area: Rect) {
-        let mut lines = vec![];
+        let mut lines = RowList::new();
 
         if let Some(board) = app.board_in_context() {
             {
@@ -191,9 +191,6 @@ impl RenderStrategy for SinglePanelRenderer {
                                             board,
                                             sprints,
                                             sprints_tier,
-                                            is_selected,
-                                            is_focused: app.focus.active
-                                                == crate::app::Focus::Cards,
                                             is_multi_selected: app
                                                 .multi_select
                                                 .selected_cards
@@ -205,7 +202,7 @@ impl RenderStrategy for SinglePanelRenderer {
                                             animation_type,
                                             search_query: app.filter.search.active_query(),
                                         });
-                                        lines.push(line);
+                                        lines.push_row(line, is_selected);
                                     }
                                 }
                             }
@@ -290,9 +287,6 @@ impl RenderStrategy for SinglePanelRenderer {
                                         board,
                                         sprints,
                                         sprints_tier,
-                                        is_selected: task_list.get_selected_index()
-                                            == Some(*card_idx),
-                                        is_focused: app.focus.active == crate::app::Focus::Cards,
                                         is_multi_selected: app
                                             .multi_select
                                             .selected_cards
@@ -304,7 +298,10 @@ impl RenderStrategy for SinglePanelRenderer {
                                         animation_type,
                                         search_query: app.filter.search.active_query(),
                                     });
-                                    lines.push(line);
+                                    lines.push_row(
+                                        line,
+                                        task_list.get_selected_index() == Some(*card_idx),
+                                    );
                                 }
                             }
                         }
@@ -336,7 +333,9 @@ impl RenderStrategy for SinglePanelRenderer {
             panel_config = panel_config.with_custom_border_style(deleted_view_focused_border());
         }
 
-        let content = Paragraph::new(lines).block(panel_config.block());
+        let content = lines
+            .focused(app.focus.active == crate::app::Focus::Cards)
+            .block(panel_config.block());
         frame.render_widget(content, area);
     }
 }
@@ -385,7 +384,7 @@ impl RenderStrategy for MultiPanelRenderer {
                 let sprints_tier = SprintTier::from_state(&board_sprints_view);
 
                 for (col_idx, task_list) in task_lists.iter().enumerate() {
-                    let mut lines = vec![];
+                    let mut lines = RowList::new();
 
                     let card_count = task_list.len();
                     let is_focused_column = active_task_list
@@ -440,9 +439,6 @@ impl RenderStrategy for MultiPanelRenderer {
                                         board,
                                         sprints,
                                         sprints_tier,
-                                        is_selected,
-                                        is_focused: app.focus.active == crate::app::Focus::Cards
-                                            && is_focused_column,
                                         is_multi_selected: app
                                             .multi_select
                                             .selected_cards
@@ -454,7 +450,7 @@ impl RenderStrategy for MultiPanelRenderer {
                                         animation_type,
                                         search_query: app.filter.search.active_query(),
                                     });
-                                    lines.push(line);
+                                    lines.push_row(line, is_selected);
                                 }
                             }
                         }
@@ -506,7 +502,9 @@ impl RenderStrategy for MultiPanelRenderer {
                             panel_config.with_custom_border_style(deleted_view_focused_border());
                     }
 
-                    let content = Paragraph::new(lines).block(panel_config.block());
+                    let content = lines
+                        .focused(app.focus.active == crate::app::Focus::Cards)
+                        .block(panel_config.block());
                     frame.render_widget(content, chunks[col_idx]);
                 }
             }

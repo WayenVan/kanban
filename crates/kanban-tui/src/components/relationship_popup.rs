@@ -1,6 +1,5 @@
 use crate::app::App;
-use crate::components::centered_rect;
-use crate::theme::on_selection;
+use crate::components::{centered_rect, RowList};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
@@ -96,7 +95,7 @@ fn render_relationship_card_list(app: &App, frame: &mut Frame, area: ratatui::la
             .collect()
     };
 
-    let mut lines = vec![];
+    let mut lines = RowList::new();
     for (idx, card_id) in filtered_cards.iter().enumerate() {
         if let Some(card) = app.model.card_by_id_state(*card_id).loaded().copied() {
             let is_selected = app.relationship.selection.get() == Some(idx);
@@ -109,16 +108,10 @@ fn render_relationship_card_list(app: &App, frame: &mut Frame, area: ratatui::la
             } else {
                 Style::default().fg(Color::White)
             };
-            let style = if is_selected {
-                on_selection(style, true)
-            } else {
-                style
-            };
-
-            lines.push(Line::from(Span::styled(
-                format!("{} {}", checkbox, card.title),
-                style,
-            )));
+            lines.push_row(
+                Span::styled(format!("{} {}", checkbox, card.title), style),
+                is_selected,
+            );
         }
     }
 
@@ -129,8 +122,7 @@ fn render_relationship_card_list(app: &App, frame: &mut Frame, area: ratatui::la
         )));
     }
 
-    let list = Paragraph::new(lines);
-    frame.render_widget(list, area);
+    frame.render_widget(lines.focused(true), area);
 }
 
 fn render_relationship_instructions(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
