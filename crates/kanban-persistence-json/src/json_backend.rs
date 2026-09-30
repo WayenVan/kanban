@@ -756,6 +756,41 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_force_flush_overwrites_external_change_with_local_state() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("force.json");
+        let local = make_store(&path);
+        local
+            .upsert_board(Board::new("Local", None::<String>))
+            .unwrap();
+        local.flush().await.unwrap();
+
+        let external = make_store(&path);
+        external
+            .upsert_board(Board::new("External", None::<String>))
+            .unwrap();
+        external.flush().await.unwrap();
+
+        local
+            .upsert_board(Board::new("Local 2", None::<String>))
+            .unwrap();
+        let err = local.flush().await.unwrap_err();
+        assert!(err.is_conflict_detected(), "got {err:?}");
+
+        local.force_flush().await.unwrap();
+
+        let mut names: Vec<String> = make_store(&path)
+            .list_boards()
+            .unwrap()
+            .into_iter()
+            .map(|b| b.name)
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["Local".to_string(), "Local 2".to_string()]);
+        assert!(!local.needs_flush());
+    }
+
     async fn test_apply_snapshot_sets_dirty_flag() {
         let dir = tempdir().unwrap();
         let jds = make_store(&dir.path().join("t.json"));

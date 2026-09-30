@@ -720,6 +720,63 @@ mod tests {
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("nonexistent.json");
         let store = JsonFileStore::new(&file_path);
+    fn envelope_snapshot(store: &JsonFileStore) -> StoreSnapshot {
+        StoreSnapshot {
+            data: serde_json::to_vec(&json!({ "boards": [] })).unwrap(),
+            metadata: PersistenceMetadata::new(store.instance_id()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_save_after_mtime_only_change_is_not_a_conflict() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.json");
+        let store = JsonFileStore::new(&file_path);
+        store.save(envelope_snapshot(&store)).await.unwrap();
+
+        let past = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&file_path)
+            .unwrap()
+            .set_modified(past)
+            .unwrap();
+
+        store
+            .save(envelope_snapshot(&store))
+            .await
+            .expect("an mtime-only touch (sync client, `touch`) must not block saving");
+    }
+
+    #[tokio::test]
+    async fn test_save_after_forget_known_metadata_overwrites_external_change() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.json");
+        let store = JsonFileStore::new(&file_path);
+        store.save(envelope_snapshot(&store)).await.unwrap();
+        std::fs::write(&file_path, r#"{"external": true}"#).unwrap();
+
+        let conflict = store.save(envelope_snapshot(&store)).await;
+        assert!(matches!(
+            conflict,
+            Err(PersistenceError::ConflictDetected { .. })
+        ));
+
+        store.forget_known_metadata().unwrap();
+        store.save(envelope_snapshot(&store)).await.unwrap();
+
+        let on_disk: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&file_path).unwrap()).unwrap();
+        assert_eq!(
+            on_disk["metadata"]["instance_id"],
+            json!(store.instance_id().to_string())
+        );
+        store
+            .save(envelope_snapshot(&store))
+            .await
+            .expect("the forced write becomes the new baseline for later saves");
+    }
+
 
         assert!(!store.exists().await);
 
