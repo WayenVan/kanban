@@ -164,7 +164,7 @@ pub(crate) fn render_create_board_popup(app: &App, frame: &mut Frame) {
         "Create New Project",
         "Project Name:",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 
@@ -174,7 +174,7 @@ pub(crate) fn render_rename_board_popup(app: &App, frame: &mut Frame) {
         "Rename Project",
         "New Project Name:",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 
@@ -184,7 +184,7 @@ pub(crate) fn render_export_board_popup(app: &App, frame: &mut Frame) {
         "Export Project",
         "Filename:",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 
@@ -194,7 +194,7 @@ pub(crate) fn render_export_all_popup(app: &App, frame: &mut Frame) {
         "Export All Projects",
         "Filename:",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 
@@ -233,7 +233,7 @@ pub(crate) fn render_set_branch_prefix_popup(app: &App, frame: &mut Frame) {
         "Set Branch Prefix",
         "Branch Prefix:",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 
@@ -303,7 +303,7 @@ pub(crate) fn render_choose_storage_file_popup(app: &App, frame: &mut Frame) {
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(input, chunks[3]);
 
-    let cursor_x = chunks[3].x + app.input.cursor_byte_offset() as u16 + 1;
+    let cursor_x = chunks[3].x + app.input.cursor_display_col() as u16 + 1;
     let cursor_y = chunks[3].y + 1;
     frame.set_cursor_position((cursor_x, cursor_y));
 

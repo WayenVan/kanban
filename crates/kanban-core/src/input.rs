@@ -1,3 +1,5 @@
+use unicode_width::UnicodeWidthStr;
+
 pub struct InputState {
     buffer: String,
     cursor_byte_offset: usize,
@@ -61,6 +63,30 @@ impl InputState {
         self.cursor_byte_offset = self.buffer.len();
     }
 
+    /// Deletes from the start of the line to the cursor (readline `C-u`).
+    pub fn delete_to_start(&mut self) {
+        self.buffer.replace_range(..self.cursor_byte_offset, "");
+        self.cursor_byte_offset = 0;
+    }
+
+    /// Deletes from the cursor to the end of the line (readline `C-k`).
+    pub fn delete_to_end(&mut self) {
+        self.buffer.truncate(self.cursor_byte_offset);
+    }
+
+    /// Deletes the whitespace-delimited word before the cursor, and any
+    /// whitespace between it and the cursor (readline `C-w`).
+    pub fn delete_word_before(&mut self) {
+        let before = &self.buffer[..self.cursor_byte_offset];
+        let word_end = before.trim_end().len();
+        let start = before[..word_end]
+            .rfind(char::is_whitespace)
+            .map_or(0, |i| i + before[i..].chars().next().unwrap().len_utf8());
+        self.buffer
+            .replace_range(start..self.cursor_byte_offset, "");
+        self.cursor_byte_offset = start;
+    }
+
     pub fn clear(&mut self) {
         self.buffer.clear();
         self.cursor_byte_offset = 0;
@@ -81,6 +107,12 @@ impl InputState {
 
     pub fn cursor_byte_offset(&self) -> usize {
         self.cursor_byte_offset
+    }
+
+    /// Terminal column of the cursor: the display width of the text before
+    /// it, so wide (e.g. CJK) characters count as two cells.
+    pub fn cursor_display_col(&self) -> usize {
+        self.buffer[..self.cursor_byte_offset].width()
     }
 }
 
@@ -401,5 +433,63 @@ mod tests {
         input.move_end();
         input.backspace();
         assert_eq!(input.as_str(), "hllo");
+    }
+
+    fn input_with_cursor(text: &str, cursor_chars_from_end: usize) -> InputState {
+        let mut input = InputState::new();
+        input.set(text.to_string());
+        for _ in 0..cursor_chars_from_end {
+            input.move_left();
+        }
+        input
+    }
+
+    #[test]
+    fn test_delete_to_start_keeps_text_after_cursor() {
+        let mut input = input_with_cursor("hello world", 5);
+        input.delete_to_start();
+        assert_eq!(input.as_str(), "world");
+        assert_eq!(input.cursor_byte_offset(), 0);
+    }
+
+    #[test]
+    fn test_delete_to_end_keeps_text_before_cursor() {
+        let mut input = input_with_cursor("hello world", 5);
+        input.delete_to_end();
+        assert_eq!(input.as_str(), "hello ");
+        assert_eq!(input.cursor_byte_offset(), 6);
+    }
+
+    #[test]
+    fn test_delete_word_before_removes_word_and_trailing_space() {
+        let mut input = input_with_cursor("fix the  bug", 0);
+        input.delete_word_before();
+        assert_eq!(input.as_str(), "fix the  ");
+        input.delete_word_before();
+        assert_eq!(input.as_str(), "fix ");
+        input.delete_word_before();
+        assert_eq!(input.as_str(), "");
+        input.delete_word_before();
+        assert_eq!(input.as_str(), "");
+    }
+
+    #[test]
+    fn test_delete_word_before_mid_line_and_multibyte() {
+        let mut input = input_with_cursor("修复 登录bug now", 4);
+        input.delete_word_before();
+        assert_eq!(input.as_str(), "修复  now");
+        assert_eq!(input.cursor_byte_offset(), "修复 ".len());
+    }
+
+    #[test]
+    fn test_cursor_display_col_counts_wide_chars_as_two() {
+        let mut input = InputState::new();
+        for c in "ab你好".chars() {
+            input.insert_char(c);
+        }
+        assert_eq!(input.cursor_byte_offset(), 8);
+        assert_eq!(input.cursor_display_col(), 6);
+        input.move_left();
+        assert_eq!(input.cursor_display_col(), 4);
     }
 }

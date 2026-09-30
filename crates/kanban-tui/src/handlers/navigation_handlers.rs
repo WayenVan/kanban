@@ -499,8 +499,8 @@ impl App {
             return;
         }
 
-        // Clear selection mode first (only when actively in selection mode)
-        if self.multi_select.selection_mode_active {
+        // Clear the selection first: selection mode, or cards picked with `;`
+        if self.multi_select.selection_mode_active || !self.multi_select.selected_cards.is_empty() {
             self.multi_select.selection_mode_active = false;
             self.multi_select.selected_cards.clear();
             return;

@@ -241,7 +241,7 @@ impl CardListComponent {
                     None
                 }
             }
-            KeyCode::Char('v') => {
+            KeyCode::Char('v') | KeyCode::Char(';') => {
                 if self
                     .config
                     .is_action_enabled(&CardListActionType::MultiSelect)

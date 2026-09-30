@@ -1494,6 +1494,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.17",
+ "unicode-width 0.2.0",
  "uuid",
 ]
 
@@ -1696,6 +1697,7 @@ dependencies = [
  "serde_json",
  "shell-words",
  "tempfile",
+ "terminal-colorsaurus",
  "thiserror 2.0.17",
  "tokio",
  "toml",
@@ -2330,7 +2332,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3064,6 +3066,32 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.2",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "terminal-colorsaurus"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f7226dad4b1817567c1e2f5d453897ef36abe79def7783af3fa241a694e30b3"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "memchr",
+ "mio 1.0.4",
+ "terminal-trx",
+ "windows-sys 0.59.0",
+ "xterm-color",
+]
+
+[[package]]
+name = "terminal-trx"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b3f27d9a8a177e57545481faec87acb45c6e854ed1e5a3658ad186c106f38ed"
+dependencies = [
+ "cfg-if",
+ "libc",
  "windows-sys 0.61.2",
 ]
 
@@ -4132,6 +4160,12 @@ name = "x11rb-protocol"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
+
+[[package]]
+name = "xterm-color"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7008a9d8ba97a7e47d9b2df63fcdb8dade303010c5a7cd5bf2469d4da6eba673"
 
 [[package]]
 name = "yoke"

@@ -156,6 +156,7 @@ impl App {
             KeybindingAction::CreateSprint => self.handle_create_sprint_key(),
             KeybindingAction::CreateColumn => self.handle_create_column_key(),
             KeybindingAction::RenameBoard => self.handle_rename_board_key(),
+            KeybindingAction::RenameCard => self.handle_rename_card_key(),
             KeybindingAction::RenameColumn => self.handle_rename_column_key(),
             KeybindingAction::SetColumnDefaultStatus => self.handle_set_column_default_status_key(),
             KeybindingAction::EditCard => {}
@@ -186,6 +187,9 @@ impl App {
             KeybindingAction::ToggleBoardsSortOrder => self.handle_toggle_board_sort_order(),
             KeybindingAction::ToggleTaskListView => self.handle_toggle_task_list_view(),
             KeybindingAction::ToggleCardSelection => self.handle_card_selection_toggle(),
+            KeybindingAction::ToggleCurrentCardSelection => {
+                self.handle_toggle_current_card_selection()
+            }
             KeybindingAction::ClearCardSelection => self.handle_clear_card_selection(),
             KeybindingAction::SelectAllCards => self.handle_select_all_cards_in_view(),
             KeybindingAction::SetCardPriority => self.handle_set_card_priority_key(),

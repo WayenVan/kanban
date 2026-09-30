@@ -1,3 +1,4 @@
+use crate::theme::on_selection;
 use kanban_domain::Board;
 use kanban_view::sprint_assign_list::SprintAssignEntry;
 use ratatui::{
@@ -28,14 +29,17 @@ pub fn render_entry_line(
             let is_current = current_sprint_id.is_none();
             let prefix = if is_checked { "[x] " } else { "[ ] " };
             let suffix = if is_current { " (current)" } else { "" };
-            let style = if is_focused {
-                Style::default().fg(Color::White).bg(Color::Blue)
-            } else if is_current {
+            let style = if is_current {
                 Style::default()
                     .fg(Color::Green)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
+            };
+            let style = if is_focused {
+                on_selection(style, true)
+            } else {
+                style
             };
             Line::from(Span::styled(format!("{}(None){}", prefix, suffix), style))
         }
@@ -43,14 +47,17 @@ pub fn render_entry_line(
             let is_current = current_sprint_id == Some(s.id);
             let prefix = if is_checked { "[x] " } else { "[ ] " };
             let suffix = if is_current { " (current)" } else { "" };
-            let style = if is_focused {
-                Style::default().fg(Color::White).bg(Color::Blue)
-            } else if is_current {
+            let style = if is_current {
                 Style::default()
                     .fg(Color::Green)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
+            };
+            let style = if is_focused {
+                on_selection(style, true)
+            } else {
+                style
             };
             Line::from(Span::styled(
                 format!("{}{}{}", prefix, s.formatted_name(board, None), suffix),
@@ -66,10 +73,11 @@ pub fn render_entry_line(
             } else {
                 Color::Red
             };
+            let style = Style::default().fg(status_color);
             let style = if is_focused {
-                Style::default().fg(Color::White).bg(Color::Blue)
+                on_selection(style, true)
             } else {
-                Style::default().fg(status_color)
+                style
             };
             Line::from(Span::styled(
                 format!("{}{}{}", prefix, s.formatted_name(board, None), suffix),

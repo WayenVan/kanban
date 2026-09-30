@@ -153,7 +153,7 @@ fn render_settings_config_file(app: &App, frame: &mut Frame, area: Rect, config_
 fn render_settings_storage(app: &App, frame: &mut Frame, area: Rect) {
     use crate::app::SettingsFocus;
     use crate::components::detail_view::{metadata_line_selectable, FieldSectionConfig};
-    use crate::theme::colors::SELECTED_BG;
+    use crate::theme::on_selection;
 
     let storage_focused = app.focus.settings_focus == SettingsFocus::Storage;
     let storage_section = FieldSectionConfig::new(" Storage ")
@@ -171,12 +171,12 @@ fn render_settings_storage(app: &App, frame: &mut Frame, area: Rect) {
     let instance_id = app.ctx.backend().instance_id().to_string();
     let export_selected = is_storage_selected(3);
     let export_checkbox_style = if export_selected {
-        Style::default().fg(Color::Yellow).bg(SELECTED_BG)
+        on_selection(Style::default().fg(Color::Yellow), true)
     } else {
         Style::default().fg(Color::Yellow)
     };
     let export_text_style = if export_selected {
-        Style::default().fg(Color::White).bg(SELECTED_BG)
+        on_selection(Style::default().fg(Color::White), true)
     } else {
         Style::default().fg(Color::White)
     };

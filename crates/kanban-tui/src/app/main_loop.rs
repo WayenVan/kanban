@@ -330,6 +330,8 @@ impl App {
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>, io::Error> {
+    // Must run before raw mode: the query manages the terminal mode itself.
+    crate::theme::detect_terminal_background();
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;

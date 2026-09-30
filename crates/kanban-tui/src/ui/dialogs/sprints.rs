@@ -8,7 +8,7 @@ pub(crate) fn render_create_sprint_popup(app: &App, frame: &mut Frame) {
         "Create New Sprint",
         "Sprint Name (optional):",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 
@@ -18,7 +18,7 @@ pub(crate) fn render_set_sprint_prefix_popup(app: &App, frame: &mut Frame) {
         "Set Sprint Prefix",
         "Sprint Prefix:",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 
@@ -28,7 +28,7 @@ pub(crate) fn render_set_sprint_card_prefix_popup(app: &App, frame: &mut Frame) 
         "Set Card Prefix Override",
         "Card Prefix:",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 

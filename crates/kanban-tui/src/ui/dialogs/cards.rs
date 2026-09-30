@@ -16,7 +16,7 @@ pub(crate) fn render_create_card_popup(app: &App, frame: &mut Frame) {
             "Create New Task",
             "Task Title:",
             app.input.as_str(),
-            app.input.cursor_byte_offset(),
+            app.input.cursor_display_col(),
         );
         return;
     };
@@ -30,7 +30,7 @@ pub(crate) fn render_create_card_popup(app: &App, frame: &mut Frame) {
             "Create New Task",
             "Task Title:",
             app.input.as_str(),
-            app.input.cursor_byte_offset(),
+            app.input.cursor_display_col(),
         );
         return;
     }
@@ -91,7 +91,7 @@ pub(crate) fn render_create_card_popup(app: &App, frame: &mut Frame) {
         );
     frame.render_widget(input, chunks[1]);
     if title_focused {
-        let cursor_x = chunks[1].x + app.input.cursor_byte_offset() as u16 + 1;
+        let cursor_x = chunks[1].x + app.input.cursor_display_col() as u16 + 1;
         let cursor_y = chunks[1].y + 1;
         frame.set_cursor_position((cursor_x, cursor_y));
     }
@@ -123,7 +123,7 @@ pub(crate) fn render_create_card_popup(app: &App, frame: &mut Frame) {
             + app
                 .dialog_input
                 .create_card_column_input
-                .cursor_byte_offset() as u16
+                .cursor_display_col() as u16
             + 1;
         let cursor_y = chunks[3].y + 1;
         frame.set_cursor_position((cursor_x, cursor_y));
@@ -159,13 +159,23 @@ pub(crate) fn render_create_card_popup(app: &App, frame: &mut Frame) {
     }
 }
 
+pub(crate) fn render_rename_card_popup(app: &App, frame: &mut Frame) {
+    render_input_popup(
+        frame,
+        "Rename Task",
+        "New Task Title:",
+        app.input.as_str(),
+        app.input.cursor_display_col(),
+    );
+}
+
 pub(crate) fn render_set_card_points_popup(app: &App, frame: &mut Frame) {
     render_input_popup(
         frame,
         "Set Points",
         "Points (1-5 or empty):",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 

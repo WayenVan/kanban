@@ -146,6 +146,21 @@ impl App {
         }
     }
 
+    pub fn handle_rename_card_dialog(&mut self, key_code: KeyCode) {
+        match handle_dialog_input(&mut self.input, key_code, false) {
+            DialogAction::Confirm => {
+                self.rename_card();
+                self.pop_mode();
+                self.input.clear();
+            }
+            DialogAction::Cancel => {
+                self.pop_mode();
+                self.input.clear();
+            }
+            DialogAction::None => {}
+        }
+    }
+
     pub fn handle_export_board_dialog(&mut self, key_code: KeyCode) {
         match handle_dialog_input(&mut self.input, key_code, false) {
             DialogAction::Confirm => {

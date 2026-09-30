@@ -53,7 +53,7 @@ pub(crate) fn render_create_column_popup(app: &App, frame: &mut Frame) {
         );
     frame.render_widget(input, chunks[1]);
     if name_focused {
-        let cursor_x = chunks[1].x + app.input.cursor_byte_offset() as u16 + 1;
+        let cursor_x = chunks[1].x + app.input.cursor_display_col() as u16 + 1;
         let cursor_y = chunks[1].y + 1;
         frame.set_cursor_position((cursor_x, cursor_y));
     }
@@ -93,7 +93,7 @@ pub(crate) fn render_rename_column_popup(app: &App, frame: &mut Frame) {
         "Rename Column",
         "New Column Name:",
         app.input.as_str(),
-        app.input.cursor_byte_offset(),
+        app.input.cursor_display_col(),
     );
 }
 

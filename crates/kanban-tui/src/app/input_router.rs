@@ -41,6 +41,7 @@ impl App {
                 | AppMode::Dialog(DialogMode::CreateCard)
                 | AppMode::Dialog(DialogMode::CreateSprint)
                 | AppMode::Dialog(DialogMode::RenameBoard)
+                | AppMode::Dialog(DialogMode::RenameCard)
                 | AppMode::Dialog(DialogMode::ExportBoard)
                 | AppMode::Dialog(DialogMode::ExportAll)
                 | AppMode::Dialog(DialogMode::SetCardPoints)
@@ -51,6 +52,40 @@ impl App {
                 | AppMode::Dialog(DialogMode::SetSprintCardPrefix)
                 | AppMode::Dialog(DialogMode::ChooseStorageFile)
         );
+
+        // Readline-style Ctrl keys in text inputs. The handlers below only see
+        // `key.code`, so without this a Ctrl chord would type its letter.
+        let mut key = key;
+        if is_input_mode
+            && key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL)
+        {
+            let KeyCode::Char(c) = key.code else {
+                return false;
+            };
+            key.modifiers = crossterm::event::KeyModifiers::NONE;
+            key.code = match c.to_ascii_lowercase() {
+                'h' => KeyCode::Backspace,
+                'j' | 'm' => KeyCode::Enter,
+                'a' => KeyCode::Home,
+                'e' => KeyCode::End,
+                'b' => KeyCode::Left,
+                'f' => KeyCode::Right,
+                'd' => KeyCode::Delete,
+                edit @ ('u' | 'w' | 'k') => {
+                    if let Some(input) = self.active_text_input_mut() {
+                        match edit {
+                            'u' => input.delete_to_start(),
+                            'w' => input.delete_word_before(),
+                            _ => input.delete_to_end(),
+                        }
+                    }
+                    return false;
+                }
+                _ => return false,
+            };
+        }
 
         if matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q'))
             && !is_input_mode
@@ -136,6 +171,7 @@ impl App {
                 DialogMode::CreateCard => self.handle_create_card_dialog(key.code),
                 DialogMode::CreateSprint => self.handle_create_sprint_dialog(key.code),
                 DialogMode::RenameBoard => self.handle_rename_board_dialog(key.code),
+                DialogMode::RenameCard => self.handle_rename_card_dialog(key.code),
                 DialogMode::ExportBoard => self.handle_export_board_dialog(key.code),
                 DialogMode::ExportAll => self.handle_export_all_dialog(key.code),
                 DialogMode::ImportBoard => self.handle_import_board_popup(key.code),
@@ -241,7 +277,10 @@ impl App {
             }
             KeyCode::Char('r') => {
                 self.pending_key = None;
-                self.handle_rename_board_key();
+                match self.focus.active {
+                    Focus::Boards => self.handle_rename_board_key(),
+                    Focus::Cards => self.handle_rename_card_key(),
+                }
             }
             KeyCode::Char('e') => {
                 self.pending_key = None;
@@ -323,6 +362,10 @@ impl App {
             KeyCode::Char('v') => {
                 self.pending_key = None;
                 self.handle_card_selection_toggle();
+            }
+            KeyCode::Char(';') => {
+                self.pending_key = None;
+                self.handle_toggle_current_card_selection();
             }
             KeyCode::Char('V') => {
                 self.pending_key = None;
@@ -434,6 +477,19 @@ impl App {
             _ => {
                 self.pending_key = None;
             }
+        }
+    }
+
+    /// The text buffer the current input mode edits, if one has focus.
+    fn active_text_input_mut(&mut self) -> Option<&mut kanban_core::InputState> {
+        match self.mode {
+            AppMode::Search => Some(&mut self.filter.search_input_target_mut().input),
+            AppMode::Dialog(DialogMode::CreateColumn)
+                if !self.dialog_input.create_column_focus_is_name() =>
+            {
+                None
+            }
+            _ => Some(&mut self.input),
         }
     }
 

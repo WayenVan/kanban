@@ -70,6 +70,7 @@ impl KeybindingRegistry {
                 DialogMode::CreateCard => Box::new(DialogInputProvider::new("Create Task")),
                 DialogMode::CreateSprint => Box::new(DialogInputProvider::new("Create Sprint")),
                 DialogMode::RenameBoard => Box::new(DialogInputProvider::new("Rename Project")),
+                DialogMode::RenameCard => Box::new(DialogInputProvider::new("Rename Task")),
                 DialogMode::RenameColumn => Box::new(DialogInputProvider::new("Rename Column")),
                 DialogMode::SetColumnDefaultStatus => {
                     Box::new(DialogSelectionProvider::new("Set Default Status"))

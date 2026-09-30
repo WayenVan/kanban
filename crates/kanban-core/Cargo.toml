@@ -17,6 +17,7 @@ serde.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 async-trait.workspace = true
+unicode-width = "0.2"
 
 [dev-dependencies]
 serde_json.workspace = true

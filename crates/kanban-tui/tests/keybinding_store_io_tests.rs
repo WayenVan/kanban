@@ -22,9 +22,23 @@ fn classify(action: &KeybindingAction) -> Purity {
     match action {
         ToggleArchivedView | ToggleArchivedBoardsView => Purity::LazyRead,
 
-        NavigateDown | NavigateUp | NavigateLeft | NavigateRight | SelectItem | Escape
-        | FocusPanel(_) | JumpToTop | JumpToBottom | JumpHalfViewportUp | JumpHalfViewportDown
-        | ToggleCardSelection | ClearCardSelection | SelectAllCards | ShowHelp | EditCard
+        NavigateDown
+        | NavigateUp
+        | NavigateLeft
+        | NavigateRight
+        | SelectItem
+        | Escape
+        | FocusPanel(_)
+        | JumpToTop
+        | JumpToBottom
+        | JumpHalfViewportUp
+        | JumpHalfViewportDown
+        | ToggleCardSelection
+        | ToggleCurrentCardSelection
+        | ClearCardSelection
+        | SelectAllCards
+        | ShowHelp
+        | EditCard
         | Search => Purity::Pure,
 
         CreateCard
@@ -32,6 +46,7 @@ fn classify(action: &KeybindingAction) -> Purity {
         | CreateSprint
         | CreateColumn
         | RenameBoard
+        | RenameCard
         | RenameColumn
         | SetColumnDefaultStatus
         | EditBoard

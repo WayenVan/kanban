@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::theme::on_selection;
 use crate::ui::{load_state_body, render_unavailable_panel};
 use kanban_domain::{LoadState, SprintStatus};
 use kanban_view::selection_dialog::{
@@ -287,10 +288,11 @@ impl SelectionDialog for CarryOverSprintDialog {
                         let is_selected =
                             app.dialog_input.carry_over_sprint_selection.get() == Some(idx);
 
+                        let style = Style::default().fg(Color::White);
                         let style = if is_selected {
-                            Style::default().fg(Color::White).bg(Color::Blue)
+                            on_selection(style, true)
                         } else {
-                            Style::default().fg(Color::White)
+                            style
                         };
 
                         let prefix = if is_selected { "> " } else { "  " };

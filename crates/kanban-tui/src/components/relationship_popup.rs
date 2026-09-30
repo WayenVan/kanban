@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::components::centered_rect;
+use crate::theme::on_selection;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
@@ -103,12 +104,15 @@ fn render_relationship_card_list(app: &App, frame: &mut Frame, area: ratatui::la
 
             let checkbox = if is_checked { "[✓]" } else { "[ ]" };
 
-            let style = if is_selected {
-                Style::default().fg(Color::White).bg(Color::Blue)
-            } else if is_checked {
+            let style = if is_checked {
                 Style::default().fg(Color::Green)
             } else {
                 Style::default().fg(Color::White)
+            };
+            let style = if is_selected {
+                on_selection(style, true)
+            } else {
+                style
             };
 
             lines.push(Line::from(Span::styled(

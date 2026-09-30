@@ -146,8 +146,6 @@ fn render_board_sprints_list(
     frame: &mut Frame,
     area: Rect,
 ) {
-    use crate::theme::colors::SELECTED_BG;
-
     let sprints_config = FieldSectionConfig::new("Sprints")
         .with_focus_indicator("Sprints [4]")
         .focused(app.focus.board_focus == BoardFocus::Sprints);
@@ -186,8 +184,8 @@ fn render_board_sprints_list(
                     let is_ended = sprint.is_ended(chrono::Utc::now());
 
                     let mut base_style = normal_text();
-                    if is_selected && is_focused {
-                        base_style = base_style.bg(SELECTED_BG);
+                    if is_selected {
+                        base_style = on_selection(base_style, is_focused);
                     }
 
                     let mut spans = vec![
@@ -201,16 +199,16 @@ fn render_board_sprints_list(
 
                     if is_active_sprint {
                         let mut active_style = active_item();
-                        if is_selected && is_focused {
-                            active_style = active_style.bg(SELECTED_BG);
+                        if is_selected {
+                            active_style = on_selection(active_style, is_focused);
                         }
                         spans.push(Span::styled(" Active", active_style));
                     }
 
                     if is_ended {
                         let mut ended_style = ended_marker();
-                        if is_selected && is_focused {
-                            ended_style = ended_style.bg(SELECTED_BG);
+                        if is_selected {
+                            ended_style = on_selection(ended_style, is_focused);
                         }
                         spans.push(Span::styled(" Ended", ended_style));
                     }
@@ -245,8 +243,6 @@ fn render_board_columns_list(
     frame: &mut Frame,
     area: Rect,
 ) {
-    use crate::theme::colors::SELECTED_BG;
-
     let columns_config = FieldSectionConfig::new("Columns")
         .with_focus_indicator("Columns [5]")
         .focused(app.focus.board_focus == BoardFocus::Columns);
@@ -303,8 +299,8 @@ fn render_board_columns_list(
                         .count();
 
                     let mut base_style = normal_text();
-                    if is_selected && is_focused {
-                        base_style = base_style.bg(SELECTED_BG);
+                    if is_selected {
+                        base_style = on_selection(base_style, is_focused);
                     }
 
                     let mut spans = vec![

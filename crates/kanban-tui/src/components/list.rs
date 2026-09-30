@@ -1,4 +1,4 @@
-use crate::theme::{active_item, normal_text, selected_item};
+use crate::theme::{active_item, normal_text, on_selection};
 use ratatui::{
     style::Style,
     text::{Line, Span},
@@ -48,8 +48,8 @@ impl ListItemConfig {
             style = active_item();
         }
 
-        if self.is_selected && self.is_focused {
-            style = style.bg(selected_item(true).bg.unwrap());
+        if self.is_selected {
+            style = on_selection(style, self.is_focused);
         }
 
         style

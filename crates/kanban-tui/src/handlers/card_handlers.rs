@@ -116,6 +116,20 @@ impl App {
         }
     }
 
+    /// Adds or removes just the card under the cursor, without entering
+    /// selection mode, so non-adjacent cards can be picked one by one.
+    pub fn handle_toggle_current_card_selection(&mut self) {
+        if self.focus.active != Focus::Cards {
+            return;
+        }
+        if let Some(card) = self.get_selected_card_in_context() {
+            let selected = &mut self.multi_select.selected_cards;
+            if !selected.remove(&card.id) {
+                selected.insert(card.id);
+            }
+        }
+    }
+
     pub fn handle_clear_card_selection(&mut self) {
         self.multi_select.selected_cards.clear();
     }
@@ -302,6 +316,47 @@ impl App {
             }
         }
         should_restart
+    }
+
+    /// Opens the rename dialog on the card under the cursor, prefilled with
+    /// its title.
+    pub fn handle_rename_card_key(&mut self) {
+        if self.focus.active != Focus::Cards {
+            return;
+        }
+        if let Some(card) = self.get_selected_card_in_context() {
+            self.input.set(card.title.clone());
+            self.open_dialog(DialogMode::RenameCard);
+        }
+    }
+
+    /// Applies the rename dialog's input as the title of the card under the
+    /// cursor; a blank title is ignored.
+    pub fn rename_card(&mut self) {
+        let new_title = self.input.as_str().trim().to_string();
+        if new_title.is_empty() {
+            return;
+        }
+        let Some(card_id) = self.get_selected_card_in_context().map(|card| card.id) else {
+            return;
+        };
+        match self.ctx.update_card_impl(
+            card_id,
+            CardUpdate {
+                title: Some(new_title),
+                ..Default::default()
+            },
+        ) {
+            Ok((_, inv)) => {
+                self.resolve_after_command(inv);
+                self.prepare_frame();
+                self.select_card_by_id(card_id);
+            }
+            Err(e) => {
+                tracing::error!("Failed to rename card: {}", e);
+                self.set_error(format!("Failed to rename card: {}", e));
+            }
+        }
     }
 
     fn toggle_card_completion(&mut self) {

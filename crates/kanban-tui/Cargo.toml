@@ -39,6 +39,7 @@ toml = "0.8"
 dunce.workspace = true
 shell-words = "^1.1"
 which = "^8.0"
+terminal-colorsaurus = "1"
 
 [features]
 test-helpers = []

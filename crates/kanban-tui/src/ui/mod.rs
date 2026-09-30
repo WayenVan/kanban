@@ -94,6 +94,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 DialogMode::CreateCard => dialogs::render_create_card_popup(app, frame),
                 DialogMode::CreateSprint => dialogs::render_create_sprint_popup(app, frame),
                 DialogMode::RenameBoard => dialogs::render_rename_board_popup(app, frame),
+                DialogMode::RenameCard => dialogs::render_rename_card_popup(app, frame),
                 DialogMode::ExportBoard => dialogs::render_export_board_popup(app, frame),
                 DialogMode::ExportAll => dialogs::render_export_all_popup(app, frame),
                 DialogMode::ImportBoard => dialogs::render_import_board_popup(app, frame),

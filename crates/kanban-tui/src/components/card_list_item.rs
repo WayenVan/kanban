@@ -40,11 +40,8 @@ pub struct CardListItemConfig<'a> {
 pub fn render_card_list_item(config: CardListItemConfig) -> Line<'static> {
     let is_done = config.card.status == CardStatus::Done;
 
-    let (checkbox, text_color) = if is_done {
-        ("[x]", DONE_TEXT)
-    } else {
-        ("[ ]", NORMAL_TEXT)
-    };
+    // Done cards are told apart by their dimmed, struck-through title.
+    let text_color = if is_done { DONE_TEXT } else { NORMAL_TEXT };
 
     let mut base_style = Style::default().fg(text_color);
     let mut title_style = Style::default().fg(text_color);
@@ -61,9 +58,9 @@ pub fn render_card_list_item(config: CardListItemConfig) -> Line<'static> {
         };
         base_style = base_style.bg(flash_bg);
         title_style = title_style.bg(flash_bg);
-    } else if config.is_selected && config.is_focused {
-        base_style = base_style.bg(SELECTED_BG);
-        title_style = title_style.bg(SELECTED_BG);
+    } else if config.is_selected {
+        base_style = on_selection(base_style, config.is_focused);
+        title_style = on_selection(title_style, config.is_focused);
     }
 
     let suffix_text = if config.show_sprint_name {
@@ -83,47 +80,43 @@ pub fn render_card_list_item(config: CardListItemConfig) -> Line<'static> {
         card_identifier_suffix(config.card, config.board, config.sprints)
     };
 
-    let select_indicator = if config.is_multi_selected {
-        "► "
-    } else {
-        "  "
+    // One glyph carries both: the story points as a bold digit (a dot when
+    // unestimated), coloured by priority.
+    let (priority_glyph, mut priority_glyph_style) = match config.card.points {
+        Some(points) => (
+            points.to_string(),
+            priority_style(config.card.priority).add_modifier(Modifier::BOLD),
+        ),
+        None => ("●".to_string(), priority_style(config.card.priority)),
     };
-
-    let mut points_style = if let Some(points) = config.card.points {
-        points_style(points)
-    } else {
-        normal_text()
-    };
-
-    if config.is_selected && config.is_focused {
-        points_style = points_style.bg(SELECTED_BG);
+    if config.is_selected {
+        priority_glyph_style = on_selection(priority_glyph_style, config.is_focused);
     }
-
-    let mut priority_style_val = priority_style(config.card.priority);
-    if config.is_selected && config.is_focused {
-        priority_style_val = priority_style_val.bg(SELECTED_BG);
-    }
-
-    let points_text = config
-        .card
-        .points
-        .map(|p| p.to_string())
-        .unwrap_or_else(|| " ".to_string());
 
     let title_spans = build_title_spans(&config.card.title, title_style, config.search_query);
 
+    // Multi-selected cards get a coloured block in the leftmost cell, so the
+    // marker costs no extra width and stacks with the cursor highlight.
+    let (marker, mut marker_style) = if config.is_multi_selected {
+        ("▌", Style::default().fg(MULTI_SELECT_MARKER))
+    } else {
+        (" ", Style::default())
+    };
+    if config.is_selected {
+        marker_style = on_selection(marker_style, config.is_focused);
+    }
+
     let mut spans = vec![
-        Span::styled("● ", priority_style_val),
-        Span::styled(points_text, points_style),
-        Span::raw(" "),
-        Span::styled(format!("{}{} ", select_indicator, checkbox), base_style),
+        Span::styled(marker, marker_style),
+        Span::styled(priority_glyph, priority_glyph_style),
+        Span::styled(" ", base_style),
     ];
     spans.extend(title_spans);
 
     if !suffix_text.is_empty() {
         let mut suffix_style = label_text();
-        if config.is_selected && config.is_focused {
-            suffix_style = suffix_style.bg(SELECTED_BG);
+        if config.is_selected {
+            suffix_style = on_selection(suffix_style, config.is_focused);
         }
         spans.push(Span::styled(suffix_text, suffix_style));
     }
@@ -368,6 +361,39 @@ mod tests {
         // and what an identifier lookup finds. Both the sprint and no-sprint
         // branches walk the same chain.
         assert_eq!(card_identifier_suffix(&card, &board, &[]), " (KAN-5)");
+    }
+
+    fn render_plain(is_multi_selected: bool, points: Option<u8>) -> String {
+        let board = Board::new("B".to_string(), Some("KAN"));
+        let col = Column::new(board.id, "C".to_string(), 0);
+        let mut card = Card::new(board.id, col.id, "t", 0);
+        card.points = points;
+
+        let line = render_card_list_item(CardListItemConfig {
+            card: &card,
+            board: &board,
+            sprints: &[],
+            sprints_tier: SprintTier::Loaded,
+            is_selected: false,
+            is_focused: false,
+            is_multi_selected,
+            show_sprint_name: false,
+            animation_type: None,
+            search_query: None,
+        });
+        line.spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn test_render_card_list_item_marks_multi_selection_in_the_leftmost_cell() {
+        assert!(render_plain(false, Some(3)).starts_with(" 3 t"));
+        assert!(render_plain(true, Some(3)).starts_with("▌3 t"));
+    }
+
+    #[test]
+    fn test_render_card_list_item_shows_a_dot_for_unestimated_cards() {
+        assert!(render_plain(false, None).starts_with(" ● t"));
+        assert!(render_plain(false, Some(13)).starts_with(" 13 t"));
     }
 
     #[test]

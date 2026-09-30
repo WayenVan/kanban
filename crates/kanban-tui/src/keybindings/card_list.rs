@@ -29,6 +29,12 @@ impl KeybindingProvider for CardListProvider {
                     KeybindingAction::EditCard,
                 ),
                 Keybinding::new(
+                    "r",
+                    "rename",
+                    "Rename selected task",
+                    KeybindingAction::RenameCard,
+                ),
+                Keybinding::new(
                     "c",
                     "complete",
                     "Toggle task completion",
@@ -51,6 +57,12 @@ impl KeybindingProvider for CardListProvider {
                     "select",
                     "Select task for bulk operation",
                     KeybindingAction::ToggleCardSelection,
+                ),
+                Keybinding::new(
+                    ";",
+                    "toggle",
+                    "Toggle the current task in the selection",
+                    KeybindingAction::ToggleCurrentCardSelection,
                 ),
                 Keybinding::new(
                     "Ctrl+a",

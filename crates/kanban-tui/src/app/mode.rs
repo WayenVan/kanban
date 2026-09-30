@@ -3,6 +3,7 @@ pub enum DialogMode {
     CreateBoard,
     CreateCard,
     RenameBoard,
+    RenameCard,
     ExportBoard,
     ExportAll,
     ImportBoard,
