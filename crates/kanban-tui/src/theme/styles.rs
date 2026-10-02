@@ -93,20 +93,20 @@ pub fn popup_bg() -> Style {
     Style::default().bg(POPUP_BG)
 }
 
-/// A text input row: a surface off the popup background, raised a step
-/// while the field has focus.
+/// A text input row: no fill, so it sits on the popup background; text is
+/// dimmed while the field lacks focus.
 pub fn input_field(focused: bool) -> Style {
-    normal_text().bg(selected_bg(focused))
+    if focused {
+        normal_text()
+    } else {
+        label_text()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_select_cell_lifts_dim_text_and_keeps_other_colours() {
-        let mut dim = Cell::default();
-        dim.set_fg(Color::DarkGray);
     #[test]
     fn test_input_field_has_no_fill_and_dims_only_when_unfocused() {
         assert_eq!(input_field(true).bg, None);
@@ -115,6 +115,10 @@ mod tests {
         assert_eq!(input_field(false).fg, label_text().fg);
     }
 
+    #[test]
+    fn test_select_cell_lifts_dim_text_and_keeps_other_colours() {
+        let mut dim = Cell::default();
+        dim.set_fg(Color::DarkGray);
         select_cell(&mut dim, true);
         assert_eq!(dim.fg, selected_dim_text());
         assert_eq!(dim.bg, selected_bg(true));
