@@ -72,3 +72,40 @@ impl EventHandler {
 pub fn should_quit(key: &KeyEvent) -> bool {
     matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q'))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyEventState, KeyModifiers};
+
+    fn key(kind: KeyEventKind) -> KeyEvent {
+        KeyEvent {
+            code: KeyCode::Char('j'),
+            modifiers: KeyModifiers::NONE,
+            kind,
+            state: KeyEventState::NONE,
+        }
+    }
+
+    #[test]
+    fn test_translate_resize_requests_a_redraw() {
+        assert!(matches!(
+            translate(CrosstermEvent::Resize(80, 24)),
+            Some(Event::Resize)
+        ));
+    }
+
+    #[test]
+    fn test_translate_forwards_key_presses_only() {
+        assert!(matches!(
+            translate(CrosstermEvent::Key(key(KeyEventKind::Press))),
+            Some(Event::Key(_))
+        ));
+        assert!(translate(CrosstermEvent::Key(key(KeyEventKind::Release))).is_none());
+    }
+
+    #[test]
+    fn test_translate_ignores_unhandled_events() {
+        assert!(translate(CrosstermEvent::FocusGained).is_none());
+    }
+}
