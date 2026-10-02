@@ -107,6 +107,14 @@ mod tests {
     fn test_select_cell_lifts_dim_text_and_keeps_other_colours() {
         let mut dim = Cell::default();
         dim.set_fg(Color::DarkGray);
+    #[test]
+    fn test_input_field_has_no_fill_and_dims_only_when_unfocused() {
+        assert_eq!(input_field(true).bg, None);
+        assert_eq!(input_field(false).bg, None);
+        assert_eq!(input_field(true).fg, normal_text().fg);
+        assert_eq!(input_field(false).fg, label_text().fg);
+    }
+
         select_cell(&mut dim, true);
         assert_eq!(dim.fg, selected_dim_text());
         assert_eq!(dim.bg, selected_bg(true));
