@@ -85,6 +85,7 @@ impl App {
                                                 break;
                                             }
                                         }
+                                        Event::Resize => {}
                                         Event::Tick => {
                                             saw_tick = true;
                                         }
@@ -99,6 +100,9 @@ impl App {
                                         }
                                     }
                                 }
+                            }
+                            Event::Resize => {
+                                self.needs_redraw = true;
                             }
                             Event::Tick => {
                                 if !self.animation.animating.is_empty() {

@@ -5,7 +5,19 @@ use tokio::sync::mpsc;
 #[derive(Debug, Clone)]
 pub enum Event {
     Key(KeyEvent),
+    Resize,
     Tick,
+}
+
+fn translate(event: CrosstermEvent) -> Option<Event> {
+    match event {
+        CrosstermEvent::Key(key) => {
+            tracing::trace!(code = ?key.code, kind = ?key.kind, modifiers = ?key.modifiers, "raw key event");
+            (key.kind == KeyEventKind::Press).then_some(Event::Key(key))
+        }
+        CrosstermEvent::Resize(..) => Some(Event::Resize),
+        _ => None,
+    }
 }
 
 pub struct EventHandler {
@@ -31,21 +43,17 @@ impl EventHandler {
                         break;
                     }
                     _ = tokio::time::sleep(Duration::from_millis(16)) => {
-                        let mut had_key = false;
+                        let mut had_event = false;
                         while event::poll(Duration::from_millis(0)).unwrap_or(false) {
-                            if let Ok(CrosstermEvent::Key(key)) = event::read() {
-                                tracing::trace!(code = ?key.code, kind = ?key.kind, modifiers = ?key.modifiers, "raw key event");
-                                if key.kind != KeyEventKind::Press {
-                                    continue;
-                                }
-
-                                had_key = true;
-                                if tx.send(Event::Key(key)).is_err() {
-                                    break;
-                                }
+                            let Some(event) = event::read().ok().and_then(translate) else {
+                                continue;
+                            };
+                            had_event = true;
+                            if tx.send(event).is_err() {
+                                break;
                             }
                         }
-                        if !had_key && tx.send(Event::Tick).is_err() {
+                        if !had_event && tx.send(Event::Tick).is_err() {
                             break;
                         }
                     }
